@@ -17,3 +17,148 @@
 @media(max-width:720px){.shell{display:block}.sidebar{display:none}.topbar{height:64px;padding:8px 18px}.mobile-brand{display:block}.mobile-brand img{width:97px;height:57px;object-fit:contain;margin:-13px 0}.topbar-context{display:none}.topbar-right{gap:9px}.content{height:calc(100dvh - 64px - 66px);overflow-y:auto}.content-inner{padding:20px 15px 44px}.heading-row h1{font-size:25px}.heading-row p{font-size:11px}.heading-date{display:none}.stats-grid{gap:9px}.stat-card{padding:12px 10px;min-height:95px;flex-direction:column;align-items:flex-start;gap:7px;border-radius:14px}.stat-icon{width:31px;height:31px;border-radius:9px}.stat-icon svg{width:17px;height:17px}.stat-card span:not(.stat-accent){font-size:8px}.stat-card b{font-size:21px}.stat-card b small{font-size:9px}.stat-card b.stat-name{font-size:13px}.map-and-members{gap:15px}.section-card-head{height:72px;padding:14px}.section-card-head h3{font-size:13px}.family-map{height:410px}.members-card{min-height:unset}.member-list{display:block}.bottom-info{grid-template-columns:1fr;gap:10px;margin-top:15px}.info-bubble{padding:13px}.mobile-tabs{position:fixed;bottom:0;left:0;right:0;height:calc(65px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);background:#fff;border-top:1px solid #c9dbdf;display:grid;grid-template-columns:repeat(3,1fr);z-index:1500;box-shadow:0 -5px 20px rgba(7,58,75,.04)}.mobile-tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9px;font-weight:700;color:#8299a2;background:white}.mobile-tabs button.selected{color:#00a9c3;background:#eafaff}.mobile-tabs button.selected svg{stroke-width:2.6}.mobile-tabs svg{width:20px;height:20px}.auth-layout{display:block}.auth-hero{min-height:250px;padding:21px 22px 40px}.auth-hero-content{margin-top:4px}.auth-hero h1{font-size:31px;max-width:380px;margin:10px 0}.auth-hero-content>p{font-size:11px;max-width:270px;line-height:1.8}.hero-chips,.auth-hero-bottom{display:none}.hero-emblem{width:205px;right:-48px;bottom:-65px;opacity:.6}.auth-brand img{height:66px;width:105px}.auth-side{min-height:calc(100dvh - 230px);padding:0 15px 28px;margin-top:-14px;position:relative;border-radius:23px 23px 0 0}.auth-card{margin-top:20px;border-radius:20px;padding:24px 20px}.auth-mobile-logo{display:none}.auth-card h2{font-size:21px}.family-management,.settings-layout{grid-template-columns:1fr}.settings-panel:nth-child(2){grid-row:auto}.invite-row{align-items:flex-start;flex-direction:column}.heading-row>.primary-btn{white-space:nowrap;padding:8px 12px;min-height:40px;font-size:10px}.heading-row h1{font-size:22px}.heading-row .eyebrow{font-size:8px}.sharing-control{flex-wrap:wrap;padding:13px}.sharing-control button{width:100%}.map-top-label{top:12px;left:12px;padding:9px}.map-recenter{top:auto;bottom:41px;left:13px;right:auto}.map-osm-label{display:none}}
 @media(max-width:360px){.stat-card b{font-size:18px}.stat-card b.stat-name{font-size:11px}.map-top-label small{font-size:8px}.map-top-label b{font-size:9px}.family-map{height:355px}.heading-row h1{font-size:21px}.topbar-right .private-chip{font-size:9px;padding:7px}.content-inner{padding-left:10px;padding-right:10px}}
 @media(min-width:1450px){.family-map{height:min(58vh,610px)}.stats-grid{gap:21px}.content-inner{padding-top:42px}}
+
+/* Compact, viewport-aware welcome and registration screen.
+   The page fits common screen sizes without clipping form inputs;
+   exceptionally short screens and mobile keyboards can scroll the form panel. */
+.auth-layout{
+  height:100vh;
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
+}
+.auth-hero{
+  height:100%;
+  min-height:0;
+  padding:clamp(18px,2.7vh,30px) clamp(25px,3vw,46px) 16px;
+}
+.auth-hero-content{margin-top:clamp(8px,1.7vh,19px)}
+.auth-hero h1{
+  font-size:clamp(31px,3.35vw,51px);
+  line-height:1.14;
+  margin:clamp(10px,1.7vh,16px) 0;
+}
+.auth-hero-content p{font-size:clamp(10px,.93vw,12px);line-height:1.65;max-width:385px}
+.hero-chips{gap:8px;margin-top:clamp(12px,2vh,19px)}
+.hero-chips span{padding:7px 10px;font-size:9px}
+.hero-emblem{
+  width:min(38vw,48vh,420px);
+  right:3%;
+  bottom:-34px;
+}
+.auth-side{
+  min-height:0;
+  height:100%;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  justify-content:center;
+  padding:clamp(10px,2vh,22px) clamp(15px,2.1vw,27px);
+}
+.auth-card{
+  padding:clamp(13px,2vh,20px) clamp(17px,2vw,27px) clamp(12px,1.8vh,18px);
+  border-radius:21px;
+  max-width:440px;
+}
+.auth-icon{width:37px;height:37px;border-radius:12px;margin-bottom:7px}
+.auth-icon svg{width:20px;height:20px}
+.auth-card h2{font-size:clamp(18px,1.6vw,22px);letter-spacing:-.6px;margin-bottom:1px}
+.auth-card>p{font-size:10px;margin-bottom:11px;line-height:1.45}
+.auth-tabs{padding:3px;margin-bottom:10px;border-radius:11px}
+.auth-tabs button{padding:7px 6px;font-size:11px;border-radius:9px}
+.auth-form{gap:5px}
+.auth-form label{font-size:10px}
+.auth-form input{height:35px;margin-bottom:2px;padding:7px 11px;font-size:11px;border-radius:10px}
+.role-choice{gap:8px;margin:1px 0 5px}
+.role-choice button{min-height:37px;padding:6px;font-size:10px;border-radius:10px}
+.role-choice svg{height:16px;width:16px}
+.auth-form .primary-btn{min-height:39px;margin-top:5px;font-size:11px;padding:8px 12px;border-radius:11px}
+.privacy-footer{margin-top:11px;padding-top:9px;font-size:9px;line-height:1.5}
+.preview-link{margin-top:9px;font-size:10px;flex-shrink:0}
+.config-callout{margin-top:8px;padding:8px 10px;font-size:9px;line-height:1.4;border-radius:10px;flex-shrink:0}
+.error-box,.notice-box{padding:7px 9px;font-size:10px;line-height:1.35}
+@media (max-height:720px) and (min-width:721px){
+  .auth-hero{padding-top:15px;padding-bottom:11px}
+  .auth-hero-content{margin-top:7px}
+  .auth-hero h1{font-size:clamp(29px,3.2vw,43px);margin:8px 0}
+  .auth-hero-content p{line-height:1.5}
+  .hero-chips{margin-top:11px}
+  .hero-emblem{width:min(32vw,44vh,360px);bottom:-27px}
+  .auth-side{padding-top:8px;padding-bottom:8px}
+  .auth-icon{width:32px;height:32px;margin-bottom:4px}
+  .auth-card{padding-top:11px;padding-bottom:11px}
+  .privacy-footer{margin-top:8px;padding-top:7px}
+  .preview-link{margin-top:6px}
+}
+@media (max-width:720px){
+  .auth-layout{display:flex;flex-direction:column;min-height:0;height:100vh;height:100dvh;overflow:hidden}
+  .auth-hero{
+    height:auto;
+    min-height:0;
+    flex:0 0 auto;
+    padding:12px 18px 16px;
+  }
+  .auth-hero-content{margin-top:0;max-width:calc(100% - 80px)}
+  .auth-hero .eyebrow{font-size:9px}
+  .auth-hero h1{font-size:clamp(20px,5.3vw,27px);line-height:1.12;margin:5px 0 1px;letter-spacing:-.65px}
+  .auth-hero-content>p,.hero-chips,.auth-hero-bottom{display:none}
+  .hero-emblem{width:clamp(80px,24vw,116px);bottom:-15px;right:4px;opacity:.88}
+  .auth-side{
+    height:auto;
+    flex:1 1 0%;
+    min-height:0;
+    margin-top:-3px;
+    padding:9px 13px max(14px,env(safe-area-inset-bottom));
+    border-radius:18px 18px 0 0;
+    justify-content:flex-start;
+    overflow-y:auto;
+    scrollbar-width:thin;
+  }
+  .auth-card{margin-top:0;max-width:460px;padding:13px 16px 12px;border-radius:18px}
+  .auth-icon{width:31px;height:31px;margin-bottom:5px;border-radius:10px}
+  .auth-icon svg{width:18px;height:18px}
+  .auth-card h2{font-size:19px}
+  .auth-card>p{margin-bottom:8px}
+  .auth-tabs{margin-bottom:7px}
+  .auth-tabs button{padding:6px}
+  .auth-form{gap:4px}
+  .auth-form input{height:35px;margin-bottom:2px}
+  .role-choice{margin:0 0 3px}
+  .role-choice button{min-height:35px}
+  .auth-form .primary-btn{margin-top:4px;min-height:37px}
+  .privacy-footer{margin-top:8px;padding-top:7px}
+  .preview-link{margin-top:8px;font-size:10px}
+  .config-callout{margin-top:7px;padding:7px 9px}
+}
+@media (max-width:720px) and (max-height:700px){
+  .auth-hero{padding-top:8px;padding-bottom:10px}
+  .auth-hero .eyebrow{font-size:8px}
+  .auth-hero h1{font-size:20px;margin:3px 0 0}
+  .hero-emblem{width:80px;bottom:-12px}
+  .auth-side{padding-top:7px}
+  .auth-card{padding:10px 13px}
+  .auth-card>p{margin-bottom:5px}
+  .auth-icon{display:none}
+  .auth-form input{height:33px}
+  .privacy-footer{font-size:8px}
+}
+@media (max-height:570px) and (min-width:721px){
+  .auth-side{justify-content:flex-start}
+  .auth-hero-content{margin-top:3px}
+  .auth-hero h1{font-size:30px}
+  .hero-emblem{width:min(30vw,40vh)}
+}
+@media (max-width:720px) and (min-height:780px){
+  .auth-side{justify-content:safe center}
+}
+@media (max-width:360px) and (max-height:690px){
+  .auth-hero{padding-top:6px;padding-bottom:7px}
+  .auth-card{padding-top:9px;padding-bottom:9px}
+  .auth-card>p{margin-bottom:4px}
+  .auth-tabs{margin-bottom:5px}
+  .auth-form{gap:3px}
+  .auth-form input{height:31px;margin-bottom:1px}
+  .role-choice button{min-height:32px}
+  .privacy-footer{margin-top:6px;padding-top:6px}
+  .preview-link{margin-top:5px}
+  .config-callout{margin-top:5px;padding:6px 8px}
+}
