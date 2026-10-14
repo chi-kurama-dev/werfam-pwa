@@ -1,0 +1,70 @@
+name: Deploy weRfam Production
+
+# Only the official weRfam source repository may publish this application.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: werfam-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & deploy committed main
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      # Vercel team/project IDs are identifiers, NOT secrets.
+      VERCEL_ORG_ID: team_rgOFSF3MNBmuxGOT8saOuYut
+      VERCEL_PROJECT_ID: prj_FRIt0cP4FeEmIiQqY10N4GpTzwKW
+      # Add this value at GitHub > Repository settings > Secrets and variables
+      # > Actions > New repository secret. NEVER commit the token.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Verify canonical repository and branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REPOSITORY" != "chi-kurama-dev/werfam-pwa" ]]; then
+            echo "::error::Refusing to deploy from an unexpected repository."
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Only main may publish to production."
+            exit 1
+          fi
+
+      - name: Check Vercel credentials
+        shell: bash
+        run: |
+          if [[ -z "$VERCEL_TOKEN" ]]; then
+            echo "::error::Add VERCEL_TOKEN to this repository's GitHub Actions secrets before production deploys can run."
+            exit 1
+          fi
+
+      - name: Check out the exact pushed commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull production project settings
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build the committed source
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Publish to production
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
