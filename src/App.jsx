@@ -130,7 +130,6 @@ function AuthScreen({ onPreview }) {
   }
   return <div className="auth-layout">
     <section className="auth-hero">
-      <header className="auth-brand"><img src="/logo-wordmark.webp" alt="weRfam" /><span>FAMILY LOCATION SHARING</span></header>
       <div className="auth-hero-content"><span className="eyebrow light"><span className="eyebrow-dot" /> Stay close, even when apart</span>
         <h1>Your family.<br /><em>Your peace of mind.</em></h1>
         <p>A beautifully simple, private space to stay connected with your loved ones — wherever the day takes them.</p>
