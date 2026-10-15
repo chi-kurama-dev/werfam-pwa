@@ -1,6 +1,6 @@
 # weRfam — Private family location-sharing PWA
 
-**Version 0.2.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
+**Version 0.3.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
 
 Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectangle panels, and the brand's navy/cyan/orange/coral palette.
 
@@ -10,11 +10,11 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 - Parent creates their family circle and invitations using 16-character codes (14-day enrollment expiry, single-use pairing). Previously generated 12-character codes still work.
 - Child signs in using **only the code** on their own phone. On first pairing, a managed child account is created and the required child profile must be completed before opening the map. The same code supports later sign-in from the paired browser only.
 - Parent dashboard, responsive private family map, family list, pending invitations, account/privacy settings.
-- Explicit child-controlled start/stop GPS sharing via browser permission prompt.
+- Child location panel with no in-app Stop Sharing action, automatic GPS resumption when permission is already granted and the PWA is active, and an explicit Allow GPS action if permission has not yet been granted. Device/OS permissions and sign-out still control tracking.
 - `watchPosition()` with ~5-second minimum publish spacing when the browser supplies new positions. No fabricated coordinates: stale/paused positions labelled.
 - Supabase Realtime updates with a 12-second visibility-aware polling fallback.
-- Strict Row Level Security: parents can only read the current GPS of children actually linked to their family; children can see only their own GPS.
-- No location movement history; clearing location on stop.
+- Family-scoped access: parents can view their linked children's latest GPS; code-paired children may view other linked members' latest *enabled* GPS through a device-verified read-only database function. Unrelated families cannot be queried.
+- No location movement history. Location updates stop when the app is inactive/closed, GPS permission is revoked, or the account signs out. The app cannot force background tracking.
 - Installable PWA manifest, app icons and minimal service worker for static shell assets (NOT family data or map tile caching).
 - Clearly labeled sample-data *interface preview* if Supabase is not configured.
 
@@ -29,7 +29,7 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
    ```
 
 2. Create a **new** Supabase project at https://supabase.com.
-3. Run `supabase/001_werfam.sql` and `supabase/002_child_code_pairing.sql` **in order on a new project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has both migrations and the function; do not run them again there.**
+3. Run `supabase/001_werfam.sql` and `supabase/002_child_code_pairing.sql` **in order on a new project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has all four migrations and the child sign-in function; do not run them again there.**
 4. In Supabase Auth settings, enable email/password and ideally **confirm email** for parent accounts. When confirming emails, add your localhost and deployed production URLs to the allowed redirect URLs.
 5. From Supabase > Project Settings > API, fill `.env` with:
 
@@ -61,7 +61,7 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 
 ## Constraints and safety
 
-- **Not an always-on tracker.** Browser and OS background throttling (especially on iOS) means GPS cannot be guaranteed after the app is locked, suspended or closed. For reliable all-day background location, build a native iOS/Android companion using platform background-location permissions.
+- **Not an always-on tracker.** There is no child-facing in-app stop toggle, but phone users can still revoke OS location permission, sign out, or close the app. Browser and OS background throttling (especially on iOS) means GPS cannot be guaranteed after the app is locked, suspended or closed. For reliable all-day background location, build a native iOS/Android companion using platform background-location permissions.
 - Browser GPS needs HTTPS and explicit permission; users can deny or revoke it.
 - No push notifications or SOS are implemented. Do not use this as an emergency-response or safety-critical service.
 - GPS accuracy, transmission frequency and anti-spoofing are not guaranteed. Never imply the child is at an exact location based on a last-known fix.
@@ -90,6 +90,8 @@ weRfam/
   supabase/
     001_werfam.sql            initial schema and RLS
     002_child_code_pairing.sql code-only child pairing migration
+    003_child_family_lookup.sql device-bound family lookup
+    004_child_family_snapshot.sql device-bound linked members and enabled GPS snapshot
     config.toml               Edge Function config
     functions/child-code-login/index.ts  code-only sign-in server
   .env.example
