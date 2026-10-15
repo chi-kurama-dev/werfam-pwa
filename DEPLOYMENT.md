@@ -27,6 +27,17 @@ Do not directly edit or commit the alternative `chiomegadeveloper-svg/werfam-pwa
 
 The workflow intentionally fails with a clear message if the `VERCEL_TOKEN` secret is missing; this prevents reporting a nonexistent production deployment as successful.
 
+## Verified production Supabase configuration (2026-10-15)
+
+On 2026-10-15, production sign-in displayed **Invalid API key** because both Vercel's `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` pointed to credentials inconsistent with the active weRfam Supabase project.
+
+The Vercel project `prj_FRIt0cP4FeEmIiQqY10N4GpTzwKW` has now been updated and independently verified to use:
+
+- Supabase URL: `https://rmcjznlmbivlgbtgnqsb.supabase.co`
+- Supabase API key: the active **publishable key** for Supabase project `rmcjznlmbivlgbtgnqsb` (the actual key is stored in Vercel, never in Git).
+
+Both variables target **production** and **preview**. The source client in `src/supabase.js` reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at Vite build time, so a **new production build** is required after updating these variables. A successful build does not replace a real browser sign-in test.
+
 ## Security
 
 - Vercel project/team identifiers are not secrets and may be committed.
