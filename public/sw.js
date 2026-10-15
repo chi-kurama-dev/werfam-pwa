@@ -15,7 +15,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(fetch(req).catch(() => caches.match('/')))
     return
   }
-  if (/\\.(js|css)$/.test(url.pathname)) {
+  if (/\.(js|css)$/.test(url.pathname)) {
     // Fetch current build files first. Offline falls back to cached assets.
     event.respondWith(fetch(req).then(response => {
       if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(req,copy))}
@@ -23,7 +23,7 @@ self.addEventListener('fetch', event => {
     }).catch(()=>caches.match(req)))
     return
   }
-  if (/\\.(png|webp|svg|woff2?|webmanifest)$/.test(url.pathname)) {
+  if (/\.(png|webp|svg|woff2?|webmanifest)$/.test(url.pathname)) {
     event.respondWith(caches.match(req).then(cached => cached || fetch(req).then(response => {
       if (response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(req, copy)) }
       return response
