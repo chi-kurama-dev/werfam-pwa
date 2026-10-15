@@ -259,7 +259,7 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
     e.preventDefault()
     if (isDemo) { setMessage('Preview only: connect Supabase to create private family invitations.'); setShowInvite(false); return }
     setSavingInvite(true)
-    try { await onAddChild(childName.trim(), relation); setChildName('');setShowInvite(false);setMessage('Child code generated! Copy it under Pending invitations and enter it on your child's own phone.') }
+    try { await onAddChild(childName.trim(), relation); setChildName('');setShowInvite(false);setMessage("Child code generated! Copy it under Pending invitations and enter it on your child’s own phone.") }
     catch (err) { setMessage(err.message) }
     finally { setSavingInvite(false) }
   }
