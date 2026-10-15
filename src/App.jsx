@@ -49,12 +49,57 @@ const IconButton = ({ children, onClick, className = '', title }) => <button cla
 const Avatar = ({ name, type = 'member', size = '' }) => <span className={`avatar ${type} ${size}`} title={type === 'parent' ? 'Parent' : name}>{type === 'parent' ? 'P' : initials(name)}</span>
 const Status = ({ state, sample = false }) => <span className={`status-pill ${sample ? 'sample' : state}`}><span className="status-dot" />{sample ? 'SAMPLE' : state === 'live' ? 'Live now' : state === 'recent' ? 'Recently seen' : state === 'stale' ? 'Last known' : 'Not sharing'}</span>
 
+// Visual-only spiderfy: nearby GPS markers are fanned apart in screen pixels.
+// Reported latitude/longitude is never altered or written back to Supabase.
+// Each dashed connector points from a displayed marker to its true GPS fix.
+function groupMapOverlaps(points,map,threshold=76){
+  const projected=points.map(item=>map.latLngToLayerPoint([Number(item.loc.latitude),Number(item.loc.longitude)]))
+  const parent=projected.map((_,i)=>i)
+  const root=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i]}return i}
+  for(let i=0;i<projected.length;i++){
+    for(let j=i+1;j<projected.length;j++){
+      if(projected[i].distanceTo(projected[j])<threshold){
+        const a=root(i),b=root(j)
+        if(a!==b)parent[b]=a
+      }
+    }
+  }
+  const groups=new Map()
+  for(let i=0;i<points.length;i++){
+    const key=root(i)
+    if(!groups.has(key))groups.set(key,[])
+    groups.get(key).push(i)
+  }
+  const positions=new Map()
+  const size=map.getSize()
+  let overlapGroups=0
+  for(const indexes of groups.values()){
+    if(indexes.length===1)continue
+    overlapGroups++
+    const radius=indexes.length===2?43:Math.max(52,Math.ceil(indexes.length*76/(2*Math.PI)))
+    const baseX=indexes.reduce((sum,i)=>sum+projected[i].x,0)/indexes.length
+    const baseY=indexes.reduce((sum,i)=>sum+projected[i].y,0)/indexes.length
+    const clamp=(value,min,max)=>Math.max(Math.min(min,max),Math.min(value,Math.max(min,max)))
+    // Keep the expanded pins in view when a group is near a map edge.
+    const cx=clamp(baseX,radius+36,size.x-radius-36)
+    const cy=clamp(baseY,radius+38,size.y-radius-38)
+    indexes.forEach((idx,ordinal)=>{
+      const theta=indexes.length===2?Math.PI-ordinal*Math.PI:(-Math.PI/2+ordinal*2*Math.PI/indexes.length)
+      positions.set(idx,map.layerPointToLatLng(L.point(cx+radius*Math.cos(theta),cy+radius*Math.sin(theta))))
+    })
+  }
+  return {positions,overlapGroups}
+}
+
 function FamilyMap({ members, locations, preview = false, selectedId, onSelect, className = '' }) {
   const elementRef = useRef(null)
   const mapRef = useRef(null)
   const markersRef = useRef(null)
   const firstFitRef = useRef(true)
-  const points = members.map((m, idx) => ({ member: m, idx, loc: locations.find(l => l.user_id === m.user_id) })).filter(o => o.loc && o.loc.latitude != null && o.loc.longitude != null && Number.isFinite(Number(o.loc.latitude)) && Number.isFinite(Number(o.loc.longitude)) && o.loc.enabled)
+  const [expandedGroups,setExpandedGroups] = useState(0)
+  const points = members.map((m, idx) => ({ member: m, idx, loc: locations.find(l => l.user_id === m.user_id) }))
+    .filter(o => o.loc && o.loc.latitude != null && o.loc.longitude != null &&
+      Number.isFinite(Number(o.loc.latitude)) && Number.isFinite(Number(o.loc.longitude)) && o.loc.enabled)
   useEffect(() => {
     if (!elementRef.current || mapRef.current) return
     const map = L.map(elementRef.current, { zoomControl: false, attributionControl: true }).setView([12.8797, 121.774], 5)
@@ -73,43 +118,73 @@ function FamilyMap({ members, locations, preview = false, selectedId, onSelect, 
     const map = mapRef.current
     const layer = markersRef.current
     if (!map || !layer) return
-    layer.clearLayers()
-    const bounds = []
-    for (const { member, idx, loc } of points) {
-      const latlng = [Number(loc.latitude), Number(loc.longitude)]
-      const name = member.profiles?.full_name || 'Family member'
-      const status = stateFor(loc)
-      const hue = idx % 2 ? 'orange' : 'cyan'
-      const icon = L.divIcon({
-        className: 'family-pin-wrap',
-        html: `<div class="family-map-pin ${hue} ${status}"><span>${sanitize(member.relation === 'parent' ? 'P' : initials(name))}</span><i></i></div>`,
-        iconSize: [58, 68], iconAnchor: [29, 60], popupAnchor: [0, -56]
-      })
-      const marker = L.marker(latlng, { icon }).addTo(layer)
-      marker.bindPopup(`<div class="map-popup"><b>${sanitize(name)}</b><small>${preview ? 'Preview location — not live' : sanitize(member.relation || 'Member')} · ${sanitize(timeAgo(loc.updated_at))}</small><small>Accuracy: approximately ${Math.round(loc.accuracy_m || 0)} m</small></div>`)
-      marker.on('click', () => onSelect?.(member.user_id))
-      if (selectedId === member.user_id) marker.openPopup()
-      if (loc.accuracy_m && loc.accuracy_m < 10000) L.circle(latlng, { radius: Number(loc.accuracy_m), color: hue === 'cyan' ? '#00cdea' : '#ff9a4c', fillOpacity: .065, weight: 1 }).addTo(layer)
-      bounds.push(latlng)
+    const draw=()=>{
+      layer.clearLayers()
+      const {positions,overlapGroups}=groupMapOverlaps(points,map)
+      setExpandedGroups(previous=>previous===overlapGroups?previous:overlapGroups)
+      for(let n=0;n<points.length;n++){
+        const {member,idx,loc}=points[n]
+        const trueLatLng=L.latLng(Number(loc.latitude),Number(loc.longitude))
+        const displayLatLng=positions.get(n)||trueLatLng
+        const fanned=positions.has(n)
+        const name=member.profiles?.full_name||'Family member'
+        const status=stateFor(loc)
+        const hue=idx%2?'orange':'cyan'
+        if(loc.accuracy_m && loc.accuracy_m<10000){
+          L.circle(trueLatLng,{radius:Number(loc.accuracy_m),color:hue==='cyan'?'#00cdea':'#ff9a4c',
+            fillOpacity:.065,weight:1,interactive:false}).addTo(layer)
+        }
+        if(fanned){
+          // Connector begins at the real location. Only the visual marker is spread.
+          L.polyline([trueLatLng,displayLatLng],{color:hue==='cyan'?'#098eab':'#e17e37',
+            weight:2,dashArray:'4 5',opacity:.9,interactive:false}).addTo(layer)
+          L.circleMarker(trueLatLng,{radius:4,color:'#073a4b',weight:1.5,
+            fillColor:'#fff',fillOpacity:1,interactive:false}).addTo(layer)
+        }
+        const icon=L.divIcon({
+          className:'family-pin-wrap',
+          html:`<div class="family-map-pin ${hue} ${status} ${fanned?'spread':''}"><span>${sanitize(member.relation==='parent'?'P':initials(name))}</span><i></i></div>`,
+          iconSize:[58,68],iconAnchor:[29,60],popupAnchor:[0,-56]
+        })
+        const marker=L.marker(displayLatLng,{icon,keyboard:true,title:name}).addTo(layer)
+        marker.bindPopup(`<div class="map-popup"><b>${sanitize(name)}</b>
+          <small>${preview?'Preview location — not live':sanitize(member.relation||'Member')} · ${sanitize(timeAgo(loc.updated_at))}</small>
+          <small>Accuracy: approximately ${Math.round(loc.accuracy_m||0)} m</small>
+          ${fanned?'<small>Marker spread for visibility. Dashed line shows its actual GPS fix.</small>':''}</div>`)
+        marker.on('click',()=>onSelect?.(member.user_id))
+        if(selectedId===member.user_id)marker.openPopup()
+      }
     }
-    if (bounds.length && firstFitRef.current) {
-      map.fitBounds(L.latLngBounds(bounds), { padding: [65, 65], maxZoom: 15 })
-      firstFitRef.current = false
+    draw()
+    // Recalculate in screen pixels whenever zooming or resizing changes overlap.
+    map.on('zoomend',draw)
+    map.on('moveend',draw)
+    map.on('resize',draw)
+    if(points.length && firstFitRef.current){
+      firstFitRef.current=false
+      map.fitBounds(L.latLngBounds(points.map(o=>[Number(o.loc.latitude),Number(o.loc.longitude)])),
+        {padding:[65,65],maxZoom:15})
     }
-  }, [members, locations, selectedId, preview])
-  function locateAll() {
-    if (!mapRef.current || !points.length) return
-    const bounds = L.latLngBounds(points.map(x => [Number(x.loc.latitude), Number(x.loc.longitude)]))
-    mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 })
+    return ()=>{map.off('zoomend',draw);map.off('moveend',draw);map.off('resize',draw)}
+  },[members,locations,selectedId,preview])
+  function locateAll(){
+    if(!mapRef.current||!points.length)return
+    const bounds=L.latLngBounds(points.map(x=>[Number(x.loc.latitude),Number(x.loc.longitude)]))
+    mapRef.current.fitBounds(bounds,{padding:[60,60],maxZoom:16})
   }
   return <div className={`family-map ${className}`}>
-    <div className="leaflet-map" ref={elementRef} />
-    <div className="map-top-label"><span className="map-light" /><div><b>Family live map</b><small>{preview ? 'Interface preview · sample coordinates' : 'Private to linked family accounts'}</small></div></div>
-    {points.length ? <button className="map-recenter" onClick={locateAll}><LocateFixed size={17} /> Fit family</button> : <div className="no-map-points"><MapPin size={25} /><b>No shared locations</b><span>Locations appear after a child opts in and opens sharing.</span></div>}
+    <div className="leaflet-map" ref={elementRef}/>
+    <div className="map-top-label"><span className="map-light"/><div><b>Family live map</b>
+      <small>{preview?'Interface preview · sample coordinates':'Private to linked family accounts'}</small></div></div>
+    {expandedGroups>0&&<div className="map-spiderfy-key" role="status">
+      <UsersRound size={13}/> Nearby pins spread apart · dashed lines point to GPS
+    </div>}
+    {points.length?<button className="map-recenter" onClick={locateAll}><LocateFixed size={17}/> Fit family</button>:
+      <div className="no-map-points"><MapPin size={25}/><b>No shared locations</b>
+        <span>Locations appear after a child opts in and opens sharing.</span></div>}
     <span className="map-osm-label">Map © OpenStreetMap</span>
   </div>
 }
-
 function AuthScreen({onPreview}) {
   const [tab,setTab]=useState('signup')
   const [name,setName]=useState('')

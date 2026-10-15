@@ -370,3 +370,15 @@
   .chat-page-top h1{font-size:14px}
   .chat-line{max-width:95%}
 }
+
+
+/* Map spiderfy: fanned markers stay individually clickable at identical GPS coordinates. */
+.family-map-pin.spread{outline:2px solid rgba(255,255,255,.93);outline-offset:3px;
+  box-shadow:0 2px 0 rgba(7,58,75,.20),0 8px 24px rgba(7,58,75,.25)}
+.map-spiderfy-key{position:absolute;right:9px;top:10px;z-index:420;pointer-events:none;
+  max-width:min(58%,235px);display:flex;align-items:center;gap:6px;
+  padding:7px 9px;border:1px solid rgba(7,58,75,.35);border-radius:11px;
+  background:rgba(255,255,255,.94);box-shadow:0 3px 10px rgba(7,58,75,.09);
+  color:#0c6179;font:700 9px/1.45 Poppins,sans-serif}
+.map-spiderfy-key svg{flex:none;color:#f09142}
+@media(max-width:720px){.map-spiderfy-key{top:42px;right:6px;max-width:62%;font-size:8px;padding:5px 7px}}
