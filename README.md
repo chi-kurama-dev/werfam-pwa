@@ -1,6 +1,6 @@
 # weRfam — Private family location-sharing PWA
 
-**Version 0.3.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
+**Version 0.4.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
 
 Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectangle panels, and the brand's navy/cyan/orange/coral palette.
 
@@ -10,6 +10,9 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 - Parent creates their family circle and invitations using 16-character codes (14-day enrollment expiry, single-use pairing). Previously generated 12-character codes still work.
 - Child signs in using **only the code** on their own phone. On first pairing, a managed child account is created and the required child profile must be completed before opening the map. The same code supports later sign-in from the paired browser only.
 - Parent dashboard, responsive private family map, family list, pending invitations, account/privacy settings.
+- Parent-only **Remove Child** button under My Family. Removal revokes that child's family membership, pairing code, shared GPS, and their messages in this family's chat. Their separate Auth identity remains isolated.
+- Private **family group chat** for linked members, built with Supabase Realtime and a visible-only polling fallback. The chat displays the latest 100 messages.
+- **10 emergency message templates** for family chat, plus **10 child quick messages** (one-tap sends). Emergency sends DO NOT contact emergency services or generate push notifications.
 - Child location panel with no in-app Stop Sharing action, automatic GPS resumption when permission is already granted and the PWA is active, and an explicit Allow GPS action if permission has not yet been granted. Device/OS permissions and sign-out still control tracking.
 - `watchPosition()` with ~5-second minimum publish spacing when the browser supplies new positions. No fabricated coordinates: stale/paused positions labelled.
 - Supabase Realtime updates with a 12-second visibility-aware polling fallback.
@@ -29,7 +32,7 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
    ```
 
 2. Create a **new** Supabase project at https://supabase.com.
-3. Run `supabase/001_werfam.sql` and `supabase/002_child_code_pairing.sql` **in order on a new project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has all four migrations and the child sign-in function; do not run them again there.**
+3. Run migrations `supabase/001_werfam.sql` through `supabase/005_family_chat_and_child_removal.sql` in numeric order **only on a new empty project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has these migrations and the child sign-in function; do not run them again there.**
 4. In Supabase Auth settings, enable email/password and ideally **confirm email** for parent accounts. When confirming emails, add your localhost and deployed production URLs to the allowed redirect URLs.
 5. From Supabase > Project Settings > API, fill `.env` with:
 
@@ -46,10 +49,10 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 1. Register Parent A, then create their family circle.
 2. Open **My Family > Enroll child**. Enter the child's name and relationship. Copy the newly created one-time invite code.
 3. On a separate phone, select **Child code**, enter the parent's code, and complete the child profile. No child email or password entry is necessary.
-4. On the child's paired phone, open **Live Map > Start sharing**, grant *precise* location permission, and keep the PWA active.
+4. On the child's paired phone, open **Live Map > Allow GPS**, grant *precise* location permission, and keep the PWA active.
 5. Parent A can see the child's latest coordinates on the family map. Stale updates are shown as **last known**.
-6. Press **Stop sharing** on the child's device. The database clears the last coordinates.
-7. Verify that unrelated Parent B cannot view Parent A's family through Supabase's anon-authenticated API.
+6. With the child profile active, open **Chat**, tap a child quick template and send a typed message. Confirm the parent receives it, then send an emergency template and verify that it is clearly marked as an emergency. These messages are for the family only, not emergency responders.
+7. As the parent, open **My Family** and choose Remove on a test child. Confirm the removal dialog, then verify the child loses access to the family, chat, pairing code, and GPS. Also verify that unrelated Parent B cannot view Parent A's family messages through the authenticated API.
 
 ## Deploy with GitHub + Vercel
 
@@ -63,7 +66,7 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 
 - **Not an always-on tracker.** There is no child-facing in-app stop toggle, but phone users can still revoke OS location permission, sign out, or close the app. Browser and OS background throttling (especially on iOS) means GPS cannot be guaranteed after the app is locked, suspended or closed. For reliable all-day background location, build a native iOS/Android companion using platform background-location permissions.
 - Browser GPS needs HTTPS and explicit permission; users can deny or revoke it.
-- No push notifications or SOS are implemented. Do not use this as an emergency-response or safety-critical service.
+- The 10 emergency templates send **ordinary in-app family-chat messages only**. There are no push/SMS notifications, location attachments, delivery guarantees, emergency-service calls, or SOS escalation. Do not use the chat as a safety-critical emergency-response system.
 - GPS accuracy, transmission frequency and anti-spoofing are not guaranteed. Never imply the child is at an exact location based on a last-known fix.
 - Child invitation codes are possession-based. First pairing and subsequent code-only sign-in are tied to a local browser installation secret. This cannot cryptographically prove that parent and child are on physically separate handsets or prevent cloning a compromised browser session. Clearing browser data or changing phones currently requires parent-assisted recovery/re-enrollment. Stronger guardian verification and device attestation are advisable before public launch.
 - Consider Philippine Data Privacy Act, informed consent, children's age and guardianship rules, and appropriate retention/erasure policies before public release.
@@ -92,6 +95,7 @@ weRfam/
     002_child_code_pairing.sql code-only child pairing migration
     003_child_family_lookup.sql device-bound family lookup
     004_child_family_snapshot.sql device-bound linked members and enabled GPS snapshot
+    005_family_chat_and_child_removal.sql family chat, RLS and parent removal
     config.toml               Edge Function config
     functions/child-code-login/index.ts  code-only sign-in server
   .env.example
