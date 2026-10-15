@@ -18,6 +18,15 @@ const DEMO_LOCATIONS = [
   { user_id: 'demo-child-1', latitude: 11.00545, longitude: 124.6078, accuracy_m: 22, updated_at: new Date().toISOString(), enabled: true },
   { user_id: 'demo-child-2', latitude: 11.0009, longitude: 124.6144, accuracy_m: 35, updated_at: new Date().toISOString(), enabled: true }
 ]
+const DEVICE_KEY = 'werfam_device_binding_v2'
+function deviceToken() {
+  let token=localStorage.getItem(DEVICE_KEY)
+  if (!token || !/^[a-f0-9]{64}$/.test(token)) {
+    token=Array.from(crypto.getRandomValues(new Uint8Array(32)), n=>n.toString(16).padStart(2,'0')).join('')
+    localStorage.setItem(DEVICE_KEY,token)
+  }
+  return token
+}
 const initials = name => (name || 'FM').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 const timeAgo = timestamp => {
   if (!timestamp) return 'No location yet'
@@ -100,57 +109,91 @@ function FamilyMap({ members, locations, preview = false, selectedId, onSelect, 
   </div>
 }
 
-function AuthScreen({ onPreview }) {
-  const [tab, setTab] = useState('signup')
-  const [role, setRole] = useState('parent')
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [invite, setInvite] = useState('')
-  const [notice, setNotice] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+function AuthScreen({onPreview}) {
+  const [tab,setTab]=useState('signup')
+  const [name,setName]=useState('')
+  const [email,setEmail]=useState('')
+  const [password,setPassword]=useState('')
+  const [code,setCode]=useState('')
+  const [notice,setNotice]=useState('')
+  const [error,setError]=useState('')
+  const [busy,setBusy]=useState(false)
   async function submit(e) {
-    e.preventDefault(); setError(''); setNotice('')
-    if (!isConfigured) { setError('Connect your own Supabase project to enable account registration. You can preview the app now.'); return }
-    if (tab === 'signup' && role === 'child' && invite.trim().length < 6) { setError('Ask your parent for your family invitation code.'); return }
+    e.preventDefault();setError('');setNotice('')
+    if(!isConfigured){setError('Supabase connection unavailable.');return}
     setBusy(true)
     try {
-      if (tab === 'signup') {
-        if (role === 'child') sessionStorage.setItem('werfam_pending_invite', invite.trim().toUpperCase())
-        const { data, error: authError } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: fullName.trim(), role } } })
-        if (authError) throw authError
-        if (!data.session) setNotice('Check your email to confirm your account, then sign in. Child accounts can apply their family code after signing in.')
-        else setNotice('Account created. Welcome to weRfam!')
-      } else {
-        const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-        if (authError) throw authError
+      if(tab==='child'){
+        const {data,error:callError}=await supabase.functions.invoke('child-code-login',{
+          body:{code:code.replace(/[\s-]/g,'').toUpperCase(),deviceToken:deviceToken()}
+        })
+        if(callError||data?.error){
+          let msg=data?.error
+          if(!msg&&callError?.context?.json)try{msg=(await callError.context.json()).error}catch{}
+          throw new Error(msg||'Could not verify this code. Ask your parent for help.')
+        }
+        if(!data?.access_token||!data?.refresh_token)throw new Error('Child sign-in session missing.')
+        const {error:e}=await supabase.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token})
+        if(e)throw e
+        setCode('')
+      }else if(tab==='signup'){
+        const {data,error:e}=await supabase.auth.signUp({
+          email:email.trim(),password,options:{data:{full_name:name.trim(),role:'parent'}}
+        })
+        if(e)throw e
+        if(!data.session)setNotice('Confirm your email, then sign in to your parent account.')
+      }else{
+        const {error:e}=await supabase.auth.signInWithPassword({email:email.trim(),password})
+        if(e)throw e
       }
-    } catch (err) { setError(err.message || 'Could not sign in.') } finally { setBusy(false) }
+    }catch(e){setError(e.message||'Sign-in failed.')}finally{setBusy(false)}
   }
+  function switchTo(next){setTab(next);setError('');setNotice('')}
   return <div className="auth-layout">
     <section className="auth-hero">
-      <div className="auth-hero-content"><span className="eyebrow light"><span className="eyebrow-dot" /> Stay close, even when apart</span>
-        <h1>Your family.<br /><em>Your peace of mind.</em></h1>
+      <div className="auth-hero-content"><span className="eyebrow light"><span className="eyebrow-dot"/> Stay close, even when apart</span>
+        <h1>Your family.<br/><em>Your peace of mind.</em></h1>
         <p>A beautifully simple, private space to stay connected with your loved ones — wherever the day takes them.</p>
-        <div className="hero-chips"><span><ShieldCheck size={16} /> Private family circle</span><span><Radio size={16} /> Live when sharing</span></div>
+        <div className="hero-chips"><span><ShieldCheck size={16}/> Private family circle</span><span><Radio size={16}/> Live when sharing</span></div>
       </div>
-      <div className="hero-emblem"><img src="/logo-emblem.webp" alt="weRfam map emblem" /></div>
-      <div className="auth-hero-bottom"><span>MADE FOR THE PEOPLE WHO MATTER MOST</span><Heart fill="currentColor" size={15} /></div>
+      <div className="hero-emblem"><img src="/logo-emblem.webp" alt="weRfam map emblem"/></div>
+      <div className="auth-hero-bottom"><span>MADE FOR THE PEOPLE WHO MATTER MOST</span><Heart fill="currentColor" size={15}/></div>
     </section>
-    <section className="auth-side"><div className="auth-mobile-logo"><img src="/logo-wordmark.webp" alt="weRfam" /></div>
-      <div className="auth-card"><div className="auth-icon"><UsersRound size={25} /></div><h2>{tab === 'signup' ? 'Welcome to the family' : 'Welcome back!'}</h2><p>{tab === 'signup' ? 'Create your secure weRfam account.' : 'Sign in to see your family circle.'}</p>
-        <div className="auth-tabs"><button className={tab === 'signup' ? 'active' : ''} onClick={() => {setTab('signup');setError('');setNotice('')}}>Create account</button><button className={tab === 'login' ? 'active' : ''} onClick={() => {setTab('login');setError('');setNotice('')}}>Sign in</button></div>
+    <section className="auth-side"><div className="auth-mobile-logo"><img src="/logo-wordmark.webp" alt="weRfam"/></div>
+      <div className="auth-card"><div className="auth-icon">{tab==='child'?<Smartphone size={25}/>:<UsersRound size={25}/>}</div>
+        <h2>{tab==='child'?'Child code sign-in':tab==='signup'?'Welcome to the family':'Welcome back!'}</h2>
+        <p>{tab==='child'?'Use the code your parent generated on your own phone.':tab==='signup'?'Create your parent account.':'Sign in as a parent.'}</p>
+        <div className="auth-tabs">
+          <button className={tab==='signup'?'active':''} onClick={()=>switchTo('signup')}>Create parent</button>
+          <button className={tab==='login'?'active':''} onClick={()=>switchTo('login')}>Parent login</button>
+          <button className={tab==='child'?'active':''} onClick={()=>switchTo('child')}>Child code</button>
+        </div>
         <form className="auth-form" onSubmit={submit}>
-          {tab === 'signup' && <><label>Who's joining?</label><div className="role-choice"><button className={role === 'parent' ? 'chosen' : ''} type="button" onClick={() => setRole('parent')}><ShieldCheck size={18} /><b>I'm a parent</b></button><button className={role === 'child' ? 'chosen' : ''} type="button" onClick={() => setRole('child')}><Heart size={18} /><b>I'm a child</b></button></div><label htmlFor="name">Full name</label><input id="name" required maxLength={80} placeholder="Enter your full name" value={fullName} onChange={e => setFullName(e.target.value)} />{role === 'child' && <><label htmlFor="invite">Family invite code</label><input id="invite" required placeholder="12-character code" maxLength={12} value={invite} onChange={e => setInvite(e.target.value.toUpperCase())} autoCapitalize="characters" /></>}</>}
-          <label htmlFor="email">Email address</label><input id="email" type="email" required placeholder="you@example.com" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
-          <label htmlFor="pass">Password</label><input id="pass" type="password" required minLength={8} placeholder="At least 8 characters" autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} />
-          {error && <div className="error-box"><AlertCircle size={15} /> {error}</div>}{notice && <div className="notice-box"><Check size={15} /> {notice}</div>}
-          <button className="primary-btn full" disabled={busy}>{busy ? 'Please wait...' : tab === 'signup' ? 'Create my account' : 'Sign in to weRfam'} <ArrowRight size={18} /></button>
+          {tab==='child'?<>
+            <label htmlFor="code">Parent-generated code</label>
+            <input id="code" required maxLength={19} autoComplete="one-time-code" autoCapitalize="characters"
+              placeholder="Enter 16-character code" value={code}
+              onChange={e=>setCode(e.target.value.toUpperCase().replace(/[^A-F0-9\s-]/g,''))}/>
+            <div className="child-device-note"><Smartphone size={17}/> One code, one paired browser on your phone. No child email or password.</div>
+          </>:<>
+            {tab==='signup'&&<><label htmlFor="name">Parent full name</label>
+              <input id="name" required maxLength={80} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"/></>}
+            <label htmlFor="email">Email address</label>
+            <input id="email" type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/>
+            <label htmlFor="pass">Password</label>
+            <input id="pass" type="password" required minLength={8} autoComplete={tab==='signup'?'new-password':'current-password'}
+              value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters"/>
+          </>}
+          {error&&<div className="error-box"><AlertCircle size={15}/>{error}</div>}
+          {notice&&<div className="notice-box"><Check size={15}/>{notice}</div>}
+          <button className="primary-btn full" disabled={busy}>
+            {busy?'Please wait...':tab==='child'?'Join my family':tab==='signup'?'Create parent account':'Parent sign in'} <ArrowRight size={18}/>
+          </button>
         </form>
-        <div className="privacy-footer"><LockKeyhole size={15} /> Child location sharing requires device permission and can be stopped.</div>
-      </div><button className="preview-link" onClick={onPreview}><Eye size={17} /> Explore the interface preview <ChevronRight size={16} /></button>
-      {!isConfigured && <div className="config-callout"><Sparkles size={17}/><span><b>UI preview mode.</b> Add your Supabase credentials and run the included SQL migration to activate private accounts and GPS updates.</span></div>}
+        <div className="privacy-footer"><LockKeyhole size={15}/> Child GPS sharing stays off until permitted.</div>
+      </div>
+      <button className="preview-link" onClick={onPreview}><Eye size={17}/> Explore the interface preview <ChevronRight size={16}/></button>
+      {!isConfigured&&<div className="config-callout"><Sparkles size={17}/><span>Configure Supabase to activate family accounts.</span></div>}
     </section>
   </div>
 }
@@ -163,15 +206,38 @@ function SetupFamily({ profile, onComplete, onSignOut }) {
   return <div className="setup-view"><img src="/logo-emblem.webp" alt=""/><div className="setup-card"><span className="eyebrow">ONE LAST STEP</span><h1>Let's create your family circle.</h1><p>Only your invited children will be linked to this private space.</p><form onSubmit={create}><label>Family circle name</label><input required maxLength="55" value={name} onChange={e => setName(e.target.value)} />{error && <div className="error-box">{error}</div>}<button disabled={busy} className="primary-btn full">{busy ? 'Creating...' : 'Create family circle'} <ArrowRight size={18}/></button></form><button className="text-link" onClick={onSignOut}>Sign out</button></div></div>
 }
 
-function ChildOnboarding({ onRedeem, onSignOut, name }) {
-  const [code, setCode] = useState(sessionStorage.getItem('werfam_pending_invite') || '')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  async function submit(e) {e.preventDefault(); setBusy(true);setError('');try { await onRedeem(code.trim().toUpperCase());sessionStorage.removeItem('werfam_pending_invite') } catch (err) {setError(err.message || 'Could not join your family.')}finally{setBusy(false)}}
-  return <div className="setup-view"><img src="/logo-emblem.webp" alt=""/><div className="setup-card"><span className="eyebrow">FAMILY INVITATION</span><h1>Hi {name?.split(' ')[0] || 'there'}! Join your family.</h1><p>Enter the private code your parent created for you. Your location stays off until you start sharing.</p><form onSubmit={submit}><label>Invitation code</label><input required maxLength={12} value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="E.g. A1B2C3D4E5F6" autoCapitalize="characters"/>{error && <div className="error-box">{error}</div>}<button disabled={busy} className="primary-btn full">{busy ? 'Checking...' : 'Join my family'} <ArrowRight size={18}/></button></form><button className="text-link" onClick={onSignOut}>Sign out</button></div></div>
+function ChildProfileSetup({initialName,onComplete,onSignOut}) {
+  const [name,setName]=useState(initialName||'')
+  const [ownPhone,setOwnPhone]=useState(false)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+  async function save(e){
+    e.preventDefault();setError('');setBusy(true)
+    try {
+      if(!ownPhone)throw new Error('Confirm this is your own phone.')
+      await onComplete(name.trim())
+    }catch(err){setError(err.message||'Could not save your profile.')}finally{setBusy(false)}
+  }
+  return <div className="setup-view child-profile-setup"><img src="/logo-emblem.webp" alt="weRfam"/>
+    <div className="setup-card"><span className="eyebrow"><Check size={15}/> CODE ACCEPTED</span>
+      <h1>Complete your profile.</h1><p>You've joined your parent's family. Your GPS remains off until you choose to share.</p>
+      <form onSubmit={save}><label htmlFor="child-name">Your full name</label>
+        <input id="child-name" required minLength={2} maxLength={80} autoComplete="name" value={name}
+          onChange={e=>setName(e.target.value)} placeholder="Full name"/>
+        <label className="child-profile-checkbox"><input type="checkbox" checked={ownPhone}
+          onChange={e=>setOwnPhone(e.target.checked)}/>
+          <span>This phone/browser is my own, separate from my parent's. I control my GPS permission.</span>
+        </label>
+        {error&&<div className="error-box"><AlertCircle size={15}/>{error}</div>}
+        <button disabled={busy||!ownPhone} className="primary-btn full">
+          {busy?'Saving...':'Complete my profile'} <ArrowRight size={17}/>
+        </button>
+      </form><button className="text-link" onClick={onSignOut}>Sign out</button>
+    </div>
+  </div>
 }
 
-function AppShell({ isDemo = false, session, profile, family, members, locations, invites, onAddChild, onRedeem, onSignOut, onReload, isSharing, onStartSharing, onStopSharing, gpsNotice, busy }) {
+function AppShell({ isDemo = false, session, profile, family, members, locations, invites, onAddChild, onSignOut, onReload, isSharing, onStartSharing, onStopSharing, gpsNotice, busy }) {
   const [view, setView] = useState('map')
   const [showInvite, setShowInvite] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
@@ -193,7 +259,7 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
     e.preventDefault()
     if (isDemo) { setMessage('Preview only: connect Supabase to create private family invitations.'); setShowInvite(false); return }
     setSavingInvite(true)
-    try { await onAddChild(childName.trim(), relation); setChildName('');setShowInvite(false);setMessage('Invitation created! Copy the code and share it privately with your child.') }
+    try { await onAddChild(childName.trim(), relation); setChildName('');setShowInvite(false);setMessage('Child code generated! Copy it under Pending invitations and enter it on your child's own phone.') }
     catch (err) { setMessage(err.message) }
     finally { setSavingInvite(false) }
   }
@@ -220,11 +286,11 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
           <div className="family-management"><div className="family-intro-card"><div className="family-decor"><UsersRound size={32}/></div><span className="section-kicker">PRIVATE FAMILY SPACE</span><h2>{familyName}</h2><p>Invite a son or daughter using a private one-time code. After they join and grant GPS permission, their location can appear on the family map.</p><div className="family-intro-count"><span><UsersRound size={17}/> {effectiveMembers.length + 1} linked people</span><span><ShieldCheck size={17}/> Invitation only</span></div></div><div className="family-roster"><div className="roster-title"><h3>Linked people</h3><span>{effectiveMembers.length + 1} total</span></div><div className="roster-row"><Avatar name={mainName}/><div><b>{mainName}</b><small>{isParent ? 'Family parent · Owner' : 'My account'}</small></div><span className="role-badge owner">{isParent ? 'Parent' : 'Child'}</span></div>{effectiveMembers.map((m,i)=><div className="roster-row" key={m.user_id}><Avatar name={m.profiles?.full_name} type={i%2?'son':'daughter'}/><div><b>{m.profiles?.full_name || 'Member'}</b><small>{m.relation} · {isDemo?'Sample':stateFor(effectiveLocations.find(l=>l.user_id===m.user_id))==='live'?'Location on':'Location private / inactive'}</small></div><span className="role-badge">{m.relation}</span></div>)}{!effectiveMembers.length && <p className="soft-copy">No children have joined. Create an invitation to begin.</p>}</div></div>
           {isParent && <div className="invite-section"><div className="roster-title"><h3>Pending invitations</h3><span>Expires after 14 days</span></div>{isDemo ? <div className="invite-empty">Connect Supabase to create real, one-time family invite codes.</div> : invites.filter(i => !i.used_by && new Date(i.expires_at)>new Date()).length ? invites.filter(i => !i.used_by && new Date(i.expires_at)>new Date()).map(i=><div className="invite-row" key={i.id}><div className="invite-person"><Avatar name={i.child_name} type={i.relation==='son'?'son':'daughter'}/><div><b>{i.child_name}</b><small>{i.relation} · Pending acceptance</small></div></div><div className="invite-code"><code>{i.code}</code><button title="Copy invitation" onClick={()=>copyCode(i.code)}>{copied===i.code?<Check size={17}/>:<Copy size={17}/>}</button></div></div>) : <div className="invite-empty">No pending invitations.</div>}{!isDemo && <p className="invite-help"><LockKeyhole size={15}/> Share an invite code privately with the intended child. Codes work only once.</p>}</div>}
         </>}
-        {view === 'settings' && <><div className="heading-row"><div><span className="eyebrow">YOUR SPACE, YOUR CONTROL</span><h1>Privacy & <span>preferences.</span></h1><p>Manage your account and location-sharing choices.</p></div></div><div className="settings-layout"><section className="settings-panel"><h3><UserRound size={20}/> Account</h3><div className="profile-summary"><Avatar name={mainName} size="large"/><div><b>{mainName}</b><span>{isDemo ? 'Sample profile' : session?.user?.email}</span><small>{isParent?'Parent':'Child'} · {familyName}</small></div></div></section><section className="settings-panel"><h3><ShieldCheck size={20}/> Location & privacy</h3><div className="setting-line"><div><b>Family-only location access</b><small>Your precise GPS coordinates aren't public.</small></div><span className="settings-checked"><Check size={17}/> Enabled</span></div><div className="setting-line"><div><b>Location history</b><small>This version stores only the latest shared location, not a movement trail.</small></div><span className="settings-checked">Not saved</span></div><div className="setting-line"><div><b>Background tracking</b><small>A PWA can't promise continuous updates when closed or suspended.</small></div><span className="settings-checked">Limited</span></div>{!isParent && <div className="setting-line"><div><b>Live location sharing</b><small>{isSharing?'Currently broadcasting':'Currently off'}</small></div><button className={isSharing?'danger-btn':'primary-btn'} disabled={busy||isDemo} onClick={isSharing?onStopSharing:onStartSharing}>{isSharing?'Stop':'Start'}</button></div>}</section><section className="settings-panel"><h3><CircleHelp size={20}/> About weRfam</h3><p className="about-copy">Version 0.1 · Parent-managed family invitations, consent-based child sharing and an OpenStreetMap family view.</p>{!isDemo && <button className="signout-button" onClick={onSignOut}><LogOut size={18}/> Sign out</button>}</section></div></>}
+        {view === 'settings' && <><div className="heading-row"><div><span className="eyebrow">YOUR SPACE, YOUR CONTROL</span><h1>Privacy & <span>preferences.</span></h1><p>Manage your account and location-sharing choices.</p></div></div><div className="settings-layout"><section className="settings-panel"><h3><UserRound size={20}/> Account</h3><div className="profile-summary"><Avatar name={mainName} size="large"/><div><b>{mainName}</b><span>{isDemo ? 'Sample profile' : (isParent?session?.user?.email:'Code-only child · paired browser')}</span><small>{isParent?'Parent':'Child'} · {familyName}</small></div></div></section><section className="settings-panel"><h3><ShieldCheck size={20}/> Location & privacy</h3><div className="setting-line"><div><b>Family-only location access</b><small>Your precise GPS coordinates aren't public.</small></div><span className="settings-checked"><Check size={17}/> Enabled</span></div><div className="setting-line"><div><b>Location history</b><small>This version stores only the latest shared location, not a movement trail.</small></div><span className="settings-checked">Not saved</span></div><div className="setting-line"><div><b>Background tracking</b><small>A PWA can't promise continuous updates when closed or suspended.</small></div><span className="settings-checked">Limited</span></div>{!isParent && <div className="setting-line"><div><b>Live location sharing</b><small>{isSharing?'Currently broadcasting':'Currently off'}</small></div><button className={isSharing?'danger-btn':'primary-btn'} disabled={busy||isDemo} onClick={isSharing?onStopSharing:onStartSharing}>{isSharing?'Stop':'Start'}</button></div>}</section><section className="settings-panel"><h3><CircleHelp size={20}/> About weRfam</h3><p className="about-copy">Version 0.1 · Parent-managed family invitations, consent-based child sharing and an OpenStreetMap family view.</p>{!isDemo && <button className="signout-button" onClick={onSignOut}><LogOut size={18}/> Sign out</button>}</section></div></>}
       </div></main>
       <nav className="mobile-tabs">{nav.map(({id,label,Icon})=><button key={id} onClick={()=>setView(id)} className={view===id?'selected':''}><Icon size={21}/><span>{label}</span></button>)}</nav>
     </div>
-    {showInvite && <div className="modal-scrim" onClick={()=>setShowInvite(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Enroll child" onClick={e=>e.stopPropagation()}><div className="modal-head"><span className="modal-icon"><UserRoundPlus size={22}/></span><IconButton title="Close" onClick={()=>setShowInvite(false)}><X size={19}/></IconButton></div><h2>Enroll your child</h2><p>Create a private invitation. Your child will sign up or sign in on their own device and enter the code to join.</p><form onSubmit={addChild}><label>Child's name</label><input maxLength={80} required placeholder="e.g. Maya Rivera" value={childName} onChange={e=>setChildName(e.target.value)}/><label>Family relationship</label><div className="role-choice"><button type="button" className={relation==='daughter'?'chosen':''} onClick={()=>setRelation('daughter')}><Heart size={17}/> Daughter</button><button type="button" className={relation==='son'?'chosen':''} onClick={()=>setRelation('son')}><Heart size={17}/> Son</button></div><div className="modal-info"><ShieldCheck size={18}/> Your child must explicitly allow location access on their own device. The parent cannot turn it on remotely.</div><button className="primary-btn full" disabled={savingInvite}>{savingInvite?'Creating invitation...':'Generate invite code'} <ArrowRight size={17}/></button></form></div></div>}
+    {showInvite && <div className="modal-scrim" onClick={()=>setShowInvite(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Enroll child" onClick={e=>e.stopPropagation()}><div className="modal-head"><span className="modal-icon"><UserRoundPlus size={22}/></span><IconButton title="Close" onClick={()=>setShowInvite(false)}><X size={19}/></IconButton></div><h2>Enroll your child</h2><p>Create a private invitation. Your child signs in using only this code on their own phone, then completes their profile.</p><form onSubmit={addChild}><label>Child's name</label><input maxLength={80} required placeholder="e.g. Maya Rivera" value={childName} onChange={e=>setChildName(e.target.value)}/><label>Family relationship</label><div className="role-choice"><button type="button" className={relation==='daughter'?'chosen':''} onClick={()=>setRelation('daughter')}><Heart size={17}/> Daughter</button><button type="button" className={relation==='son'?'chosen':''} onClick={()=>setRelation('son')}><Heart size={17}/> Son</button></div><div className="modal-info"><ShieldCheck size={18}/> Your child must explicitly allow location access on their own device. The parent cannot turn it on remotely.</div><button className="primary-btn full" disabled={savingInvite}>{savingInvite?'Creating invitation...':'Generate invite code'} <ArrowRight size={17}/></button></form></div></div>}
   </div>
 }
 
@@ -247,8 +313,12 @@ export default function App() {
 
   const loadAccount = useCallback(async (user) => {
     if (!supabase || !user) return
-    const { data: person, error: personError } = await supabase.from('profiles').select('id,full_name,role,avatar_url').eq('id',user.id).single()
+    const { data: person, error: personError } = await supabase.from('profiles').select('id,full_name,role,avatar_url,profile_completed').eq('id',user.id).single()
     if (personError) { setError(`Profile setup error: ${personError.message}. Apply the Supabase SQL migration first.`); return }
+    if(person.role==='parent'){
+      const {error:e}=await supabase.rpc('register_parent_device',{p_device_token:deviceToken()})
+      if(e)throw e
+    }
     setProfile(person)
     let circle = null
     if (person.role === 'parent') {
@@ -261,12 +331,6 @@ export default function App() {
       circle = data?.families || null
     }
     setFamily(circle)
-    if (person.role === 'child' && !circle && sessionStorage.getItem('werfam_pending_invite')) {
-      const code = sessionStorage.getItem('werfam_pending_invite')
-      const { error: redeemError } = await supabase.rpc('redeem_child_invite', { p_code: code })
-      if (!redeemError) { sessionStorage.removeItem('werfam_pending_invite'); const { data: membership } = await supabase.from('family_members').select('families(id,name,owner_id)').eq('user_id',user.id).maybeSingle(); circle = membership?.families || null; setFamily(circle) }
-      else setError(`Invitation not applied: ${redeemError.message}. You can enter the code again.`)
-    }
     if (!circle) { setMembers([]);setInvites([]);setLocations([]);return }
     if (person.role === 'parent') {
       const [memberResult, inviteResult] = await Promise.all([
@@ -303,9 +367,13 @@ export default function App() {
     const poll=setInterval(()=>{ if(document.visibilityState==='visible')reload() },12000)
     return()=>{clearInterval(poll);supabase.removeChannel(channel)}
   },[family?.id,session?.user?.id,reload])
-  async function signOut(){ if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null} if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null} if(isSharing && profile?.role==='child')await supabase.rpc('set_tracking_enabled',{p_enabled:false});setIsSharing(false);await supabase.auth.signOut() }
+  async function signOut(){ if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null} if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null} if(isSharing && profile?.role==='child')await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false);await supabase.auth.signOut() }
   async function addChild(name,relationship){const {error}=await supabase.rpc('create_child_invite',{p_name:name,p_relation:relationship});if(error)throw error;await reload()}
-  async function redeem(code){ const {error}=await supabase.rpc('redeem_child_invite',{p_code:code});if(error)throw error;await reload() }
+  async function finishProfile(name){
+    const {error:e}=await supabase.rpc('complete_child_profile',{p_full_name:name,p_device_token:deviceToken()})
+    if(e)throw e
+    await reload()
+  }
   async function startSharing(){
     setGpsNotice('');if(!navigator.geolocation){setGpsNotice('GPS is not supported by this device.');return}
     if(!window.isSecureContext){setGpsNotice('GPS requires HTTPS (or localhost).');return}
@@ -313,13 +381,13 @@ export default function App() {
     try {
       // Watch first: location permission is requested locally from the child's device.
       if(navigator.permissions?.query){ try {const p=await navigator.permissions.query({name:'geolocation'});if(p.state==='denied')throw new Error('Location permission denied. Enable GPS permission in your browser settings.')} catch(permError){if(permError.message?.startsWith('Location permission denied'))throw permError /* Safari may not support this permission query */} }
-      const {error:enabledError}=await supabase.rpc('set_tracking_enabled',{p_enabled:true});if(enabledError)throw enabledError
+      const {error:enabledError}=await supabase.rpc('set_tracking_enabled',{p_enabled:true,p_device_token:deviceToken()});if(enabledError)throw enabledError
       setIsSharing(true)
       const publishFreshPosition = async position => {
         if(Date.now()-lastPublishRef.current<5000)return
         lastPublishRef.current=Date.now()
         const c=position.coords
-        const {error:publishError}=await supabase.rpc('publish_location',{p_lat:c.latitude,p_lng:c.longitude,p_accuracy:c.accuracy,p_heading:Number.isFinite(c.heading)?c.heading:null,p_speed:Number.isFinite(c.speed)?c.speed:null})
+        const {error:publishError}=await supabase.rpc('publish_location',{p_lat:c.latitude,p_lng:c.longitude,p_accuracy:c.accuracy,p_heading:Number.isFinite(c.heading)?c.heading:null,p_speed:Number.isFinite(c.speed)?c.speed:null,p_device_token:deviceToken()})
         if(publishError)setGpsNotice(`Could not update location: ${publishError.message}`)
         else {setGpsNotice(`Sharing · accuracy about ${Math.round(c.accuracy)} m`);const {data:updated}=await supabase.from('location_latest').select('*').eq('user_id',(await supabase.auth.getUser()).data.user.id);setLocations(updated||[])}
       }
@@ -327,14 +395,14 @@ export default function App() {
         setGpsNotice(`GPS error: ${geoError.message}. Sharing paused.`)
         if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null}
         if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null}
-        await supabase.rpc('set_tracking_enabled',{p_enabled:false});setIsSharing(false)
+        await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false)
       }
       const gpsOptions={enableHighAccuracy:true,maximumAge:3000,timeout:15000}
       watchIdRef.current=navigator.geolocation.watchPosition(publishFreshPosition,onGeoError,gpsOptions)
       heartbeatRef.current=setInterval(()=>{if(document.visibilityState==='visible')navigator.geolocation.getCurrentPosition(publishFreshPosition,error=>setGpsNotice(`Waiting for GPS: ${error.message}`),gpsOptions)},15000)
-    }catch(err){setGpsNotice(err.message);setIsSharing(false);await supabase.rpc('set_tracking_enabled',{p_enabled:false})}finally{setBusy(false)}
+    }catch(err){setGpsNotice(err.message);setIsSharing(false);await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()})}finally{setBusy(false)}
   }
-  async function stopSharing(){setBusy(true);if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null}if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null}const {error}=await supabase.rpc('set_tracking_enabled',{p_enabled:false});setIsSharing(false);setGpsNotice(error?error.message:'Location sharing stopped. Your latest GPS coordinates were cleared.');setLocations([]);setBusy(false)}
+  async function stopSharing(){setBusy(true);if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null}if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null}const {error}=await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false);setGpsNotice(error?error.message:'Location sharing stopped. Your latest GPS coordinates were cleared.');setLocations([]);setBusy(false)}
   useEffect(()=>()=>{if(watchIdRef.current!==null && navigator.geolocation)navigator.geolocation.clearWatch(watchIdRef.current);if(heartbeatRef.current!==null)clearInterval(heartbeatRef.current)},[])
   if(booting) return <div className="splash"><img src="/logo-wordmark.webp" alt="weRfam"/><div className="loading-ring"/>Loading family circle...</div>
   if(demo) return <AppShell isDemo onSignOut={()=>setDemo(false)}/>
@@ -342,6 +410,7 @@ export default function App() {
   if(error && !profile) return <div className="setup-view"><div className="setup-card"><h2>Setup needed</h2><p>{error}</p><button className="primary-btn" onClick={()=>window.location.reload()}>Retry <RefreshCw size={16}/></button><button className="text-link" onClick={signOut}>Sign out</button></div></div>
   if(!profile) return <div className="splash">Loading your profile...</div>
   if(profile.role==='parent'&&!family) return <SetupFamily profile={profile} onComplete={reload} onSignOut={signOut}/>
-  if(profile.role==='child'&&!family) return <ChildOnboarding name={profile.full_name} onRedeem={redeem} onSignOut={signOut}/>
-  return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} onRedeem={redeem} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} onStopSharing={stopSharing} gpsNotice={gpsNotice} busy={busy}/>
+  if(profile.role==='child'&&!family) return <div className="setup-view"><div className="setup-card"><h2>Pairing unavailable</h2><p>Ask your parent for a fresh code on your own phone.</p><button className="text-link" onClick={signOut}>Sign out</button></div></div>
+  if(profile.role==='child'&&!profile.profile_completed) return <ChildProfileSetup initialName={profile.full_name} onComplete={finishProfile} onSignOut={signOut}/>
+  return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} onStopSharing={stopSharing} gpsNotice={gpsNotice} busy={busy}/>
 }
