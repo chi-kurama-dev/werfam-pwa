@@ -1,14 +1,14 @@
 # weRfam — Private family location-sharing PWA
 
-**Version 0.1.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
+**Version 0.2.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
 
 Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectangle panels, and the brand's navy/cyan/orange/coral palette.
 
 ## Features in this build
 
 - Parent sign-up / sign-in with email + password and a permanent server-recorded parent role.
-- Parent creates their family circle and invitations for son/daughter accounts (12-character, one-time, 14-day codes).
-- Each child registers their **own** email/password account using the invitation code (or accepts after sign-in).
+- Parent creates their family circle and invitations using 16-character codes (14-day enrollment expiry, single-use pairing). Previously generated 12-character codes still work.
+- Child signs in using **only the code** on their own phone. On first pairing, a managed child account is created and the required child profile must be completed before opening the map. The same code supports later sign-in from the paired browser only.
 - Parent dashboard, responsive private family map, family list, pending invitations, account/privacy settings.
 - Explicit child-controlled start/stop GPS sharing via browser permission prompt.
 - `watchPosition()` with ~5-second minimum publish spacing when the browser supplies new positions. No fabricated coordinates: stale/paused positions labelled.
@@ -29,8 +29,8 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
    ```
 
 2. Create a **new** Supabase project at https://supabase.com.
-3. Run `supabase/001_werfam.sql` in that project's SQL Editor **before** registering any users.
-4. In Supabase Auth settings, enable email/password and ideally **confirm email**. When confirming emails, add your localhost and deployed production URLs to the allowed redirect URLs.
+3. Run `supabase/001_werfam.sql` and `supabase/002_child_code_pairing.sql` **in order on a new project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has both migrations and the function; do not run them again there.**
+4. In Supabase Auth settings, enable email/password and ideally **confirm email** for parent accounts. When confirming emails, add your localhost and deployed production URLs to the allowed redirect URLs.
 5. From Supabase > Project Settings > API, fill `.env` with:
 
    ```dotenv
@@ -45,8 +45,8 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 
 1. Register Parent A, then create their family circle.
 2. Open **My Family > Enroll child**. Enter the child's name and relationship. Copy the newly created one-time invite code.
-3. On a second phone or browser profile, create a **child** account using that code and confirm email as needed.
-4. On the child's device, open **Live Map > Start sharing**, grant *precise* location permission, and keep the PWA active.
+3. On a separate phone, select **Child code**, enter the parent's code, and complete the child profile. No child email or password entry is necessary.
+4. On the child's paired phone, open **Live Map > Start sharing**, grant *precise* location permission, and keep the PWA active.
 5. Parent A can see the child's latest coordinates on the family map. Stale updates are shown as **last known**.
 6. Press **Stop sharing** on the child's device. The database clears the last coordinates.
 7. Verify that unrelated Parent B cannot view Parent A's family through Supabase's anon-authenticated API.
@@ -65,7 +65,7 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 - Browser GPS needs HTTPS and explicit permission; users can deny or revoke it.
 - No push notifications or SOS are implemented. Do not use this as an emergency-response or safety-critical service.
 - GPS accuracy, transmission frequency and anti-spoofing are not guaranteed. Never imply the child is at an exact location based on a last-known fix.
-- Secure invitation codes are possession-based: share them only with their intended recipient. Stronger parental approval / identity confirmation and audit logging are advisable for public launch.
+- Child invitation codes are possession-based. First pairing and subsequent code-only sign-in are tied to a local browser installation secret. This cannot cryptographically prove that parent and child are on physically separate handsets or prevent cloning a compromised browser session. Clearing browser data or changing phones currently requires parent-assisted recovery/re-enrollment. Stronger guardian verification and device attestation are advisable before public launch.
 - Consider Philippine Data Privacy Act, informed consent, children's age and guardianship rules, and appropriate retention/erasure policies before public release.
 - OSM tile servers are free only on a **best effort, fair-use** basis; do not bulk fetch. For significant scale, use an approved tile provider. Keep visible © OpenStreetMap attribution.
 - Vercel Hobby is restricted to personal/noncommercial use. Supabase free plan and Vercel have usage limits. **$0 is feasible for a small prototype, not an unrestricted guarantee for production.**
@@ -88,7 +88,10 @@ weRfam/
     supabase.js
     styles.css
   supabase/
-    001_werfam.sql  tables, RLS, RPC and realtime
+    001_werfam.sql            initial schema and RLS
+    002_child_code_pairing.sql code-only child pairing migration
+    config.toml               Edge Function config
+    functions/child-code-login/index.ts  code-only sign-in server
   .env.example
   index.html
   package.json
