@@ -326,9 +326,9 @@ export default function App() {
       if (error) throw error
       circle = data
     } else {
-      const { data, error } = await supabase.from('family_members').select('family_id,relation,families(id,name,owner_id)').eq('user_id',user.id).maybeSingle()
+      const { data, error } = await supabase.rpc('get_my_child_family', { p_device_token: deviceToken() })
       if (error) throw error
-      circle = data?.families || null
+      circle = data?.[0] || null
     }
     setFamily(circle)
     if (!circle) { setMembers([]);setInvites([]);setLocations([]);return }
@@ -410,7 +410,7 @@ export default function App() {
   if(error && !profile) return <div className="setup-view"><div className="setup-card"><h2>Setup needed</h2><p>{error}</p><button className="primary-btn" onClick={()=>window.location.reload()}>Retry <RefreshCw size={16}/></button><button className="text-link" onClick={signOut}>Sign out</button></div></div>
   if(!profile) return <div className="splash">Loading your profile...</div>
   if(profile.role==='parent'&&!family) return <SetupFamily profile={profile} onComplete={reload} onSignOut={signOut}/>
-  if(profile.role==='child'&&!family) return <div className="setup-view"><div className="setup-card"><h2>Pairing unavailable</h2><p>Ask your parent for a fresh code on your own phone.</p><button className="text-link" onClick={signOut}>Sign out</button></div></div>
   if(profile.role==='child'&&!profile.profile_completed) return <ChildProfileSetup initialName={profile.full_name} onComplete={finishProfile} onSignOut={signOut}/>
+  if(profile.role==='child'&&!family) return <div className="setup-view"><div className="setup-card"><h2>Reconnect your family</h2><p>We couldn't load your family circle. Your account is paired; check your connection and retry.</p>{error&&<div className="error-box">{error}</div>}<button className="primary-btn full" onClick={reload}><RefreshCw size={17}/> Retry connection</button><button className="text-link" onClick={signOut}>Sign in with child code again</button></div></div>
   return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} onStopSharing={stopSharing} gpsNotice={gpsNotice} busy={busy}/>
 }
