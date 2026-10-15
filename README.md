@@ -1,6 +1,6 @@
 # weRfam — Private family location-sharing PWA
 
-**Version 0.4.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
+**Version 0.5.0 / Vite + React + Supabase + Leaflet/OpenStreetMap**
 
 Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectangle panels, and the brand's navy/cyan/orange/coral palette.
 
@@ -10,6 +10,8 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
 - Parent creates their family circle and invitations using 16-character codes (14-day enrollment expiry, single-use pairing). Previously generated 12-character codes still work.
 - Child signs in using **only the code** on their own phone. On first pairing, a managed child account is created and the required child profile must be completed before opening the map. The same code supports later sign-in from the paired browser only.
 - Parent dashboard, responsive private family map, family list, pending invitations, account/privacy settings.
+- Optional parent GPS sharing: parent can turn sharing on and off, and linked children see the parent's active coordinates in their family map. Parent/child and child/child overlapping markers separate without changing GPS positions.
+- When any member publishes GPS, previous map locations for the other family members are preserved.
 - Parent-only **Remove Child** button under My Family. Removal revokes that child's family membership, pairing code, shared GPS, and their messages in this family's chat. Their separate Auth identity remains isolated.
 - Private **family group chat** for linked members, built with Supabase Realtime and a visible-only polling fallback. The chat displays the latest 100 messages.
 - **10 emergency message templates** for family chat, plus **10 child quick messages** (one-tap sends). Emergency sends DO NOT contact emergency services or generate push notifications.
@@ -32,7 +34,7 @@ Uses the actual uploaded weRfam artwork, Poppins font, responsive rounded-rectan
    ```
 
 2. Create a **new** Supabase project at https://supabase.com.
-3. Run migrations `supabase/001_werfam.sql` through `supabase/005_family_chat_and_child_removal.sql` in numeric order **only on a new empty project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has these migrations and the child sign-in function; do not run them again there.**
+3. Run migrations `supabase/001_werfam.sql` through `supabase/006_parent_optin_gps.sql` in numeric order **only on a new empty project**, then deploy `supabase/functions/child-code-login` with the `verify_jwt=false` setting in `supabase/config.toml`. **The official weRfam database already has these migrations and the child sign-in function; do not run them again there.**
 4. In Supabase Auth settings, enable email/password and ideally **confirm email** for parent accounts. When confirming emails, add your localhost and deployed production URLs to the allowed redirect URLs.
 5. From Supabase > Project Settings > API, fill `.env` with:
 
@@ -96,6 +98,7 @@ weRfam/
     003_child_family_lookup.sql device-bound family lookup
     004_child_family_snapshot.sql device-bound linked members and enabled GPS snapshot
     005_family_chat_and_child_removal.sql family chat, RLS and parent removal
+    006_parent_optin_gps.sql optional parent GPS sharing and child visibility
     config.toml               Edge Function config
     functions/child-code-login/index.ts  code-only sign-in server
   .env.example

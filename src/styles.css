@@ -385,3 +385,8 @@
 
 /* Keep separated avatars crisp and individually selectable. */
 .family-map-pin.spread{transform:translateZ(0)}
+
+/* Optional parent GPS sharing; app never tracks a parent without opt-in. */
+.parent-sharing-control{border-color:rgba(7,58,75,.35);background:#f7fbfc}
+.parent-sharing-control .danger-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:10px;border:1px solid #df8b92;background:#fff0f1;color:#b53d4c;padding:6px 11px;min-height:31px;font:700 10px Poppins,sans-serif}
+@media(max-width:720px){.dashboard-view .parent-sharing-control .danger-btn{padding:5px 8px;min-height:27px;font-size:9px}}

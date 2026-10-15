@@ -49,3 +49,13 @@ test('refresh at different zoom levels expands two identical GPS fixes',()=>{
     assert.equal(r.positions.size,2)
   }
 })
+
+test('parent, son and daughter at exactly the same place each have a separate avatar',()=>{
+ const map=fakeMap(),points=[member('parent'),member('son'),member('daughter')]
+ points[0].member.relation='parent';points[1].member.relation='son';points[2].member.relation='daughter'
+ const out=spreadOverlappingPins(points,map)
+ assert.equal(out.overlapMembers,3)
+ assert.equal(out.positions.size,3)
+ const v=[...out.positions.values()].map(p=>px(map,p))
+ for(let i=0;i<v.length;i++)for(let j=i+1;j<v.length;j++)assert.ok(d(v[i],v[j])>=90)
+})

@@ -1,5 +1,5 @@
 // App-shell-only cache. No GPS, family, auth, map tile or Supabase responses are cached.
-const CACHE = 'werfam-shell-v2-map-fix'
+const CACHE = 'werfam-shell-v3-parent-gps'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/logo-wordmark.webp', '/logo-emblem.webp']
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()))

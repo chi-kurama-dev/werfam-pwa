@@ -406,7 +406,7 @@ function FamilyChat({family, people, userId, isParent, isDemo}) {
   </section>
 }
 
-function AppShell({ isDemo = false, session, profile, family, members, locations, invites, parentName, onAddChild, onRemoveChild, onSignOut, onReload, isSharing, onStartSharing, gpsNotice, busy }) {
+function AppShell({ isDemo = false, session, profile, family, members, locations, invites, parentName, onAddChild, onRemoveChild, onSignOut, onReload, isSharing, onStartSharing, onStopSharing, gpsNotice, busy }) {
   const [view, setView] = useState('map')
   const [showInvite, setShowInvite] = useState(false)
   const [removeTarget,setRemoveTarget] = useState(null)
@@ -427,7 +427,7 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
   const parentId = isDemo ? 'demo-parent' : (family?.owner_id || (isParent ? session?.user?.id : null))
   const parentMember = { user_id: parentId, relation: 'parent', profiles: { full_name: isDemo ? 'Alex Rivera' : isParent ? mainName : (parentName || 'Parent') } }
   const circleMembers = [parentMember, ...effectiveMembers.filter(m => m.user_id !== parentId)]
-  const active = effectiveMembers.filter(m => stateFor(effectiveLocations.find(l => l.user_id === m.user_id)) === 'live').length
+  const active = circleMembers.filter(m => stateFor(effectiveLocations.find(l => l.user_id === m.user_id)) === 'live').length
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(timer) }, [])
   useEffect(() => { setSelectedId(null) }, [view])
   async function addChild(e) {
@@ -462,13 +462,22 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
         {message && <div className="inline-banner"><AlertCircle size={17}/><span>{message}</span><IconButton title="Dismiss" onClick={() => setMessage('')}><X size={15}/></IconButton></div>}
         {view === 'map' && <section className="dashboard-view"><div className="heading-row"><div><span className="eyebrow">GOOD TO SEE YOU, {mainName.split(' ')[0].toUpperCase()} <span className="wave">✦</span></span><h1>Keep your loved ones <span>close.</span></h1><p>One place to see your family's shared locations.</p></div><div className="heading-date"><Clock3 size={17}/>{new Intl.DateTimeFormat('en-PH',{ weekday:'short', month:'short', day:'numeric' }).format(clock)}</div></div>
           <div className="stats-grid"><div className="stat-card cyan"><div className="stat-icon"><UsersRound size={22}/></div><div><span>Family members</span><b>{circleMembers.length} <small>people</small></b></div><span className="stat-accent" /></div><div className="stat-card green"><div className="stat-icon"><Radio size={22}/></div><div><span>Sharing live</span><b>{active} <small>active</small></b></div><span className="stat-accent"/></div><div className="stat-card orange"><div className="stat-icon"><ShieldCheck size={22}/></div><div><span>Family circle</span><b className="stat-name">Protected</b></div><span className="stat-accent"/></div></div>
-          {!isParent && <div className="sharing-control"><div className="sharing-icon"><Navigation size={20}/></div>
+          {isParent ? !isDemo && <div className="sharing-control parent-sharing-control">
+            <div className="sharing-icon"><LocateFixed size={19}/></div>
+            <div className="sharing-text"><b>Share my location (Parent)</b><span>{isSharing ? 'Your GPS is visible to your linked children while this app is active.' : 'Optional — let linked children see your location on their maps.'}</span>{gpsNotice&&<small className="gps-feedback">{gpsNotice}</small>}</div>
+            <button className={isSharing?'danger-btn':'primary-btn'} disabled={busy} onClick={isSharing?onStopSharing:onStartSharing}>
+              {isSharing?<><EyeOff size={15}/> Stop</>:<><LocateFixed size={15}/> Share GPS</>}
+            </button>
+          </div> : <div className="sharing-control">
+            <div className="sharing-icon"><Navigation size={20}/></div>
             <div className="sharing-text"><b>Family location service</b><span>{isSharing ? 'GPS active while weRfam is running.' : 'Enable location permission to resume updates.'}</span>{gpsNotice&&<small className="gps-feedback">{gpsNotice}</small>}</div>
-            <button className="primary-btn" disabled={busy || isSharing || isDemo} onClick={onStartSharing}>{isSharing?<><Check size={16}/> Active</>:<><LocateFixed size={16}/> Allow GPS</>}</button>
+            <button className="primary-btn" disabled={busy || isSharing || isDemo} onClick={onStartSharing}>
+              {isSharing?<><Check size={16}/> Active</>:<><LocateFixed size={16}/> Allow GPS</>}
+            </button>
           </div>}
           <div className="map-and-members"><div className="map-card"><div className="section-card-head"><div><span className="section-kicker"><span className="kicker-dot"/> REAL-TIME VIEW</span><h3><MapPin size={19}/> Family location map</h3></div><span className="refresh-hint"><RefreshCw size={14}/> Updates while devices are active</span></div><FamilyMap members={circleMembers} locations={effectiveLocations} preview={isDemo} selectedId={selectedId} onSelect={setSelectedId}/></div>
             <section className="members-card"><div className="section-card-head"><div><span className="section-kicker">YOUR CIRCLE</span><h3>Family members</h3></div><span className="count-bubble">{circleMembers.length}</span></div><div className="member-list">{circleMembers.map((m,idx)=> {const loc = effectiveLocations.find(l=>l.user_id===m.user_id);const status=stateFor(loc);return <button className={`member-row ${selectedId===m.user_id?'focused':''}`} key={m.user_id} onClick={() => setSelectedId(m.user_id)}><Avatar name={m.profiles?.full_name || 'New member'} type={m.relation}/><span className="member-info"><b>{m.profiles?.full_name || 'Not joined yet'}</b><small>{m.relation === 'daughter' ? 'Daughter' : m.relation === 'son' ? 'Son' : 'Parent'} · {loc?.enabled && loc.latitude != null ? timeAgo(loc.updated_at) : 'No GPS'}</small></span><span className={`member-state ${status}`}></span><ChevronRight size={15}/></button> })}</div>{isParent && <button className="outline-action" onClick={()=>{setView('family');setShowInvite(true)}}><Plus size={17}/> Add family member</button>}<div className="member-privacy-note"><ShieldCheck size={16}/> Only linked members can appear here.</div></section></div>
-          <div className="bottom-info"><div className="info-bubble"><span className="soft-icon cyan"><RadioTower size={19}/></span><div><b>Updates while sharing</b><span>Child devices send GPS updates while their PWA is open and active.</span></div></div><div className="info-bubble"><span className="soft-icon peach"><LockKeyhole size={19}/></span><div><b>Privacy first</b><span>Precise locations are available only to the linked family and the sharing account.</span></div></div></div>
+          <div className="bottom-info"><div className="info-bubble"><span className="soft-icon cyan"><RadioTower size={19}/></span><div><b>Updates while sharing</b><span>Linked devices send GPS updates while their PWA is open and active.</span></div></div><div className="info-bubble"><span className="soft-icon peach"><LockKeyhole size={19}/></span><div><b>Privacy first</b><span>Precise locations are available only to the linked family and the sharing account.</span></div></div></div>
         </section>}
         {view === 'family' && <><div className="heading-row"><div><span className="eyebrow">A CIRCLE THAT STAYS TOGETHER</span><h1>Meet your <span>family circle.</span></h1><p>Manage family invitations and see who has joined.</p></div>{isParent && <button className="primary-btn" onClick={()=>setShowInvite(true)}><UserRoundPlus size={18}/> Enroll child</button>}</div>
           <div className="family-management"><div className="family-intro-card"><div className="family-decor"><UsersRound size={32}/></div><span className="section-kicker">PRIVATE FAMILY SPACE</span><h2>{familyName}</h2><p>Invite a son or daughter using a private one-time code. After they join and grant GPS permission, their location can appear on the family map.</p><div className="family-intro-count"><span><UsersRound size={17}/> {circleMembers.length} linked people</span><span><ShieldCheck size={17}/> Invitation only</span></div></div><div className="family-roster"><div className="roster-title"><h3>Linked people</h3><span>{circleMembers.length} total</span></div>{circleMembers.map((m,i)=><div className="roster-row" key={m.user_id}><Avatar name={m.profiles?.full_name} type={m.relation}/><div><b>{m.profiles?.full_name || 'Member'}</b><small>{m.relation} · {isDemo?'Sample':stateFor(effectiveLocations.find(l=>l.user_id===m.user_id))==='live'?'Location on':'Location private / inactive'}</small></div><span className={m.relation==='parent'?'role-badge owner':'role-badge'}>{m.relation}</span>{isParent&&m.relation!=='parent'&&!isDemo&&<button className="remove-child-btn" title={'Remove '+m.profiles?.full_name} onClick={()=>{setRemoveError('');setRemoveTarget(m)}}><Trash2 size={15}/> Remove</button>}</div>)}{isParent&&!effectiveMembers.length && <p className="soft-copy">No children have joined. Create an invitation to begin.</p>}</div></div>
@@ -543,7 +552,7 @@ export default function App() {
       if (memberResult.error) throw memberResult.error
       setMembers(memberResult.data||[])
       setInvites(inviteResult.data||[])
-      const ids = (memberResult.data||[]).map(m=>m.user_id)
+      const ids = [user.id,...(memberResult.data||[]).map(m=>m.user_id)]
       if (ids.length) { const {data:locs,error:locError}=await supabase.from('location_latest').select('*').in('user_id',ids);if(locError)throw locError;setLocations(locs||[]) }
       else setLocations([])
     } else {
@@ -555,7 +564,7 @@ export default function App() {
       setLocations(directory.filter(m=>m.enabled && m.latitude!=null && m.longitude!=null)
         .map(m=>({user_id:m.user_id,enabled:true,latitude:m.latitude,longitude:m.longitude,accuracy_m:m.accuracy_m,updated_at:m.updated_at})))
       const {data:owner}=await supabase.from('profiles').select('full_name').eq('id',circle.owner_id).maybeSingle()
-      setParentName(owner?.full_name||'Parent')
+      setParentName(owner?.full_name || directory.find(m=>m.user_id===circle.owner_id)?.full_name || 'Parent')
     }
   }, [])
   const reload = useCallback(async()=> { if(!session?.user)return;try{await loadAccount(session.user);setError('')}catch(err){setError(err.message)} },[session,loadAccount])
@@ -576,7 +585,7 @@ export default function App() {
     const poll=setInterval(()=>{ if(document.visibilityState==='visible')reload() },12000)
     return()=>{clearInterval(poll);supabase.removeChannel(channel)}
   },[family?.id,session?.user?.id,reload])
-  async function signOut(){ if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null} if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null} if(isSharing && profile?.role==='child')await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false);await supabase.auth.signOut() }
+  async function signOut(){ if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null} if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null} if(isSharing)await supabase.rpc(profile?.role==='parent'?'set_parent_tracking_enabled':'set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false);await supabase.auth.signOut() }
   async function removeChild(childId){
     const {error}=await supabase.rpc('remove_child_from_family',{p_child_id:childId})
     if(error)throw error
@@ -595,28 +604,42 @@ export default function App() {
     try {
       // Watch first: location permission is requested locally from the child's device.
       if(navigator.permissions?.query){ try {const p=await navigator.permissions.query({name:'geolocation'});if(p.state==='denied')throw new Error('Location permission denied. Enable GPS permission in your browser settings.')} catch(permError){if(permError.message?.startsWith('Location permission denied'))throw permError /* Safari may not support this permission query */} }
-      const {error:enabledError}=await supabase.rpc('set_tracking_enabled',{p_enabled:true,p_device_token:deviceToken()});if(enabledError)throw enabledError
+      const {error:enabledError}=await supabase.rpc(profile?.role==='parent'?'set_parent_tracking_enabled':'set_tracking_enabled',{p_enabled:true,p_device_token:deviceToken()});if(enabledError)throw enabledError
       setIsSharing(true)
       const publishFreshPosition = async position => {
         if(Date.now()-lastPublishRef.current<5000)return
         lastPublishRef.current=Date.now()
         const c=position.coords
-        const {error:publishError}=await supabase.rpc('publish_location',{p_lat:c.latitude,p_lng:c.longitude,p_accuracy:c.accuracy,p_heading:Number.isFinite(c.heading)?c.heading:null,p_speed:Number.isFinite(c.speed)?c.speed:null,p_device_token:deviceToken()})
+        const {error:publishError}=await supabase.rpc(profile?.role==='parent'?'publish_parent_location':'publish_location',{p_lat:c.latitude,p_lng:c.longitude,p_accuracy:c.accuracy,p_heading:Number.isFinite(c.heading)?c.heading:null,p_speed:Number.isFinite(c.speed)?c.speed:null,p_device_token:deviceToken()})
         if(publishError)setGpsNotice(`Could not update location: ${publishError.message}`)
-        else {setGpsNotice(`Sharing · accuracy about ${Math.round(c.accuracy)} m`);const {data:updated}=await supabase.from('location_latest').select('*').eq('user_id',(await supabase.auth.getUser()).data.user.id);setLocations(updated||[])}
+        else {setGpsNotice(`Sharing · accuracy about ${Math.round(c.accuracy)} m`);const {data:updated}=await supabase.from('location_latest').select('*').eq('user_id',(await supabase.auth.getUser()).data.user.id);setLocations(previous=>[...previous.filter(row=>row.user_id!==session?.user?.id),...(updated||[])])}
       }
       const onGeoError = async geoError => {
         setGpsNotice(`GPS error: ${geoError.message}. Sharing paused.`)
         if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null}
         if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null}
-        await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false)
+        await supabase.rpc(profile?.role==='parent'?'set_parent_tracking_enabled':'set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false)
       }
       const gpsOptions={enableHighAccuracy:true,maximumAge:3000,timeout:15000}
       watchIdRef.current=navigator.geolocation.watchPosition(publishFreshPosition,onGeoError,gpsOptions)
       heartbeatRef.current=setInterval(()=>{if(document.visibilityState==='visible')navigator.geolocation.getCurrentPosition(publishFreshPosition,error=>setGpsNotice(`Waiting for GPS: ${error.message}`),gpsOptions)},15000)
-    }catch(err){setGpsNotice(err.message);setIsSharing(false);await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()})}finally{setBusy(false)}
+    }catch(err){setGpsNotice(err.message);setIsSharing(false);await supabase.rpc(profile?.role==='parent'?'set_parent_tracking_enabled':'set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()})}finally{setBusy(false)}
   }
-  // There is no child-facing in-app stop switch; OS permission remains user-controlled.
+  async function stopParentSharing(){
+    if(profile?.role!=='parent')return
+    setBusy(true)
+    try{
+      if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null}
+      if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null}
+      const {error:e}=await supabase.rpc('set_parent_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()})
+      if(e)throw e
+      setIsSharing(false)
+      setGpsNotice('Parent GPS is off; shared coordinates were cleared.')
+      await reload()
+    }catch(e){setGpsNotice(e.message||'Could not stop location sharing.')}
+    finally{setBusy(false)}
+  }
+  // No child-facing stop switch; phone location permissions remain user-controlled.
   useEffect(()=>{
     // Resume an already-granted GPS permission when the child opens the app.
     // First-time access remains an explicit device permission action.
@@ -645,5 +668,5 @@ export default function App() {
   if(profile.role==='parent'&&!family) return <SetupFamily profile={profile} onComplete={reload} onSignOut={signOut}/>
   if(profile.role==='child'&&!profile.profile_completed) return <ChildProfileSetup initialName={profile.full_name} onComplete={finishProfile} onSignOut={signOut}/>
   if(profile.role==='child'&&!family) return <div className="setup-view"><div className="setup-card"><h2>Reconnect your family</h2><p>We couldn't load your family circle. Your account is paired; check your connection and retry.</p>{error&&<div className="error-box">{error}</div>}<button className="primary-btn full" onClick={reload}><RefreshCw size={17}/> Retry connection</button><button className="text-link" onClick={signOut}>Sign in with child code again</button></div></div>
-  return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} onRemoveChild={removeChild} parentName={parentName} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} gpsNotice={gpsNotice} busy={busy}/>
+  return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} onRemoveChild={removeChild} parentName={parentName} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} onStopSharing={stopParentSharing} gpsNotice={gpsNotice} busy={busy}/>
 }
