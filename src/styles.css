@@ -175,3 +175,95 @@
 .child-profile-checkbox input{width:17px!important;height:17px!important;min-height:17px!important;
  margin:2px 0 0!important;flex:none;accent-color:#05bfdc}
 @media(max-width:400px){.auth-tabs button{font-size:9px}.child-device-note{padding:7px;font-size:10px}}
+
+
+/* v0.3 — full-screen family map layout, all-member compact ribbon, 35% dark borders */
+.dashboard-view{display:flex;flex-direction:column;min-height:0;gap:9px}
+.dashboard-view .heading-row,.dashboard-view .stats-grid,.dashboard-view .sharing-control{flex:none;margin:0}
+.dashboard-view .map-and-members{flex:1;min-height:0;grid-template-columns:minmax(0,2.3fr) minmax(220px,.85fr);gap:11px}
+.dashboard-view .map-card{min-height:0;display:flex;flex-direction:column}
+.dashboard-view .family-map{height:auto;min-height:0;flex:1}
+.dashboard-view .members-card{min-height:0}
+.dashboard-view .member-list{min-height:0;overflow:auto}
+.dashboard-view .map-card,.dashboard-view .members-card,.dashboard-view .stat-card{border-color:rgba(7,58,75,.35)}
+@media(min-width:721px){
+  .shell{height:100dvh;min-height:0;overflow:hidden}
+  .main-area{height:100dvh;min-height:0}
+  .content-inner:has(.dashboard-view){height:100%;min-height:0;padding-top:12px;padding-bottom:12px}
+  .dashboard-view{height:100%}
+  .dashboard-view .heading-row h1{font-size:clamp(19px,1.8vw,25px);margin:2px 0}
+  .dashboard-view .stats-grid{gap:10px}
+  .dashboard-view .stat-card{min-height:59px;padding:8px 12px}
+  .dashboard-view .stat-card .stat-icon{height:36px;width:36px}
+  .dashboard-view .stat-card b{font-size:20px}
+  .dashboard-view .stat-card b.stat-name{font-size:15px}
+  .dashboard-view .section-card-head{height:51px;padding:9px 14px}
+  .dashboard-view .bottom-info{display:none}
+}
+@media(max-width:980px) and (min-width:721px){
+  .dashboard-view .map-and-members{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(180px,.8fr)}
+  .dashboard-view .member-list{display:block}
+}
+@media(max-width:720px){
+  .shell{height:100dvh;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+  .main-area{flex:1;height:100dvh;min-height:0}
+  .topbar{height:49px;padding:4px 11px;flex:0 0 49px}
+  .mobile-brand img{width:83px;height:48px;margin:-8px 0}
+  .topbar-right .private-chip{padding:6px 9px;font-size:9px}
+  .topbar-right .avatar.small{height:30px;width:30px;font-size:10px}
+  .content{flex:1;height:auto;min-height:0;overflow-y:auto}
+  .content:has(.dashboard-view){overflow:hidden}
+  .content-inner:has(.dashboard-view){height:100%;min-height:0;padding:6px 9px}
+  .dashboard-view{height:100%;min-height:0;gap:5px}
+  .dashboard-view .heading-row{margin:0;min-height:22px}
+  .dashboard-view .heading-row .eyebrow,.dashboard-view .heading-row p,.dashboard-view .heading-date{display:none}
+  .dashboard-view .heading-row h1{font-size:16px;line-height:1.2;margin:0;letter-spacing:-.4px}
+  .dashboard-view .stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:0}
+  .dashboard-view .stat-card{min-height:46px;height:46px;padding:6px;gap:5px;flex-direction:row;align-items:center;border-radius:11px}
+  .dashboard-view .stat-icon{width:24px;height:24px;flex:none;border-radius:7px}
+  .dashboard-view .stat-icon svg{height:14px;width:14px}
+  .dashboard-view .stat-card span:not(.stat-accent){font-size:7px}
+  .dashboard-view .stat-card b{font-size:15px;line-height:1.05}
+  .dashboard-view .stat-card b small{font-size:8px}
+  .dashboard-view .stat-card b.stat-name{font-size:10px}
+  .dashboard-view .map-and-members{display:flex;flex-direction:column;min-height:0;flex:1;gap:6px}
+  .dashboard-view .map-card{flex:1;min-height:0}
+  .dashboard-view .map-card .section-card-head{height:34px;flex:0 0 34px;padding:4px 10px}
+  .dashboard-view .section-kicker{font-size:7px;letter-spacing:.7px}
+  .dashboard-view .section-card-head h3{font-size:11px;margin:1px 0 0;gap:5px}
+  .dashboard-view .section-card-head h3 svg{width:14px;height:14px}
+  .dashboard-view .map-card .family-map{height:auto;flex:1;min-height:0}
+  .dashboard-view .map-top-label{top:5px;left:6px;padding:5px 7px;border-radius:9px;gap:6px}
+  .dashboard-view .map-top-label b{font-size:9px}
+  .dashboard-view .map-top-label small{font-size:7px}
+  .dashboard-view .map-recenter{bottom:24px;left:7px;padding:7px 9px}
+  .dashboard-view .members-card{height:89px;flex:0 0 89px;border-radius:13px;overflow:hidden}
+  .dashboard-view .members-card .section-card-head{height:27px;flex:0 0 27px;padding:3px 9px}
+  .dashboard-view .members-card .section-card-head h3{font-size:10px}
+  .dashboard-view .members-card .section-kicker{display:none}
+  .dashboard-view .count-bubble{padding:2px 6px;font-size:9px}
+  .dashboard-view .member-list{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;gap:5px;padding:2px 6px 4px;scrollbar-width:thin;min-height:0}
+  .dashboard-view .member-row{display:flex;flex:0 0 132px;width:132px;min-width:0;height:51px;gap:5px;padding:4px;margin:0;border-radius:9px;border-color:rgba(7,58,75,.18)}
+  .dashboard-view .member-row .avatar{width:27px;height:27px;border-radius:9px;font-size:9px}
+  .dashboard-view .member-row>svg{display:none}
+  .dashboard-view .member-info b{font-size:9px}
+  .dashboard-view .member-info small{font-size:8px}
+  .dashboard-view .member-state{height:6px;width:6px}
+  .dashboard-view .members-card .outline-action,.dashboard-view .member-privacy-note{display:none}
+  .dashboard-view .bottom-info{display:none}
+  .dashboard-view .sharing-control{min-height:44px;padding:5px 7px;gap:7px;border-radius:11px;flex-wrap:nowrap}
+  .dashboard-view .sharing-icon{width:25px;height:25px;border-radius:8px}
+  .dashboard-view .sharing-icon svg{width:14px;height:14px}
+  .dashboard-view .sharing-text{min-width:0;gap:1px}
+  .dashboard-view .sharing-text b{font-size:9px}
+  .dashboard-view .sharing-text span{font-size:8px;line-height:1.3}
+  .dashboard-view .sharing-control .primary-btn{width:auto;min-height:27px;padding:4px 7px;font-size:8px;white-space:nowrap}
+  .mobile-tabs{position:static;flex:0 0 calc(56px + env(safe-area-inset-bottom,0px));height:calc(56px + env(safe-area-inset-bottom,0px))}
+  .mobile-tabs button{font-size:8px;gap:2px}
+  .mobile-tabs svg{width:18px;height:18px}
+}
+@media(max-width:720px) and (max-height:600px){
+  .dashboard-view .heading-row{display:none}
+  .dashboard-view .stats-grid .stat-card{height:38px;min-height:38px}
+  .dashboard-view .members-card{height:77px;flex-basis:77px}
+}
