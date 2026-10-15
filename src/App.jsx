@@ -226,7 +226,7 @@ function ChildProfileSetup({initialName,onComplete,onSignOut}) {
           onChange={e=>setName(e.target.value)} placeholder="Full name"/>
         <label className="child-profile-checkbox"><input type="checkbox" checked={ownPhone}
           onChange={e=>setOwnPhone(e.target.checked)}/>
-          <span>This phone/browser is my own, separate from my parent's. I control my GPS permission.</span>
+          <span>This is my own phone/browser. My family can see my location while GPS permission is allowed; device settings can revoke this permission.</span>
         </label>
         {error&&<div className="error-box"><AlertCircle size={15}/>{error}</div>}
         <button disabled={busy||!ownPhone} className="primary-btn full">
@@ -300,6 +300,7 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [family, setFamily] = useState(null)
   const [members, setMembers] = useState([])
+  const [parentName, setParentName] = useState('')
   const [invites, setInvites] = useState([])
   const [locations, setLocations] = useState([])
   const [demo, setDemo] = useState(false)
@@ -310,6 +311,7 @@ export default function App() {
   const watchIdRef = useRef(null)
   const lastPublishRef = useRef(0)
   const heartbeatRef = useRef(null)
+  const autoStartRef = useRef(false)
 
   const loadAccount = useCallback(async (user) => {
     if (!supabase || !user) return
@@ -333,6 +335,7 @@ export default function App() {
     setFamily(circle)
     if (!circle) { setMembers([]);setInvites([]);setLocations([]);return }
     if (person.role === 'parent') {
+      setParentName(person.full_name)
       const [memberResult, inviteResult] = await Promise.all([
         supabase.from('family_members').select('user_id,relation,profiles(full_name,avatar_url)').eq('family_id',circle.id),
         supabase.from('child_invites').select('id,child_name,relation,code,expires_at,used_by').eq('family_id',circle.id).order('created_at',{ascending:false})
@@ -344,9 +347,15 @@ export default function App() {
       if (ids.length) { const {data:locs,error:locError}=await supabase.from('location_latest').select('*').in('user_id',ids);if(locError)throw locError;setLocations(locs||[]) }
       else setLocations([])
     } else {
-      setMembers([])
-      const {data:locs} = await supabase.from('location_latest').select('*').eq('user_id',user.id)
-      setLocations(locs||[])
+      // Device-scoped family snapshot lets children see all linked siblings and their consented GPS updates.
+      const {data:rows,error:directoryError}=await supabase.rpc('child_family_snapshot',{p_device_token:deviceToken()})
+      if(directoryError)throw directoryError
+      const directory=rows||[]
+      setMembers(directory.map(m=>({user_id:m.user_id,relation:m.relation,profiles:{full_name:m.full_name,avatar_url:m.avatar_url}})))
+      setLocations(directory.filter(m=>m.enabled && m.latitude!=null && m.longitude!=null)
+        .map(m=>({user_id:m.user_id,enabled:true,latitude:m.latitude,longitude:m.longitude,accuracy_m:m.accuracy_m,updated_at:m.updated_at})))
+      const {data:owner}=await supabase.from('profiles').select('full_name').eq('id',circle.owner_id).maybeSingle()
+      setParentName(owner?.full_name||'Parent')
     }
   }, [])
   const reload = useCallback(async()=> { if(!session?.user)return;try{await loadAccount(session.user);setError('')}catch(err){setError(err.message)} },[session,loadAccount])
@@ -357,7 +366,7 @@ export default function App() {
     const {data:{subscription}} = supabase.auth.onAuthStateChange((_event, newSession)=>{setSession(newSession)})
     return ()=>{valid=false;subscription.unsubscribe()}
   },[])
-  useEffect(()=>{ if(session?.user){setError('');loadAccount(session.user).catch(err=>setError(err.message))}else{setProfile(null);setFamily(null);setMembers([]);setLocations([])} },[session?.user?.id,loadAccount])
+  useEffect(()=>{ if(session?.user){setError('');loadAccount(session.user).catch(err=>setError(err.message))}else{setProfile(null);setFamily(null);setMembers([]);setParentName('');setLocations([])} },[session?.user?.id,loadAccount])
   useEffect(()=>{
     if(!session?.user || !family || !supabase) return
     const channel=supabase.channel(`family-view-${family.id}`)
@@ -402,7 +411,26 @@ export default function App() {
       heartbeatRef.current=setInterval(()=>{if(document.visibilityState==='visible')navigator.geolocation.getCurrentPosition(publishFreshPosition,error=>setGpsNotice(`Waiting for GPS: ${error.message}`),gpsOptions)},15000)
     }catch(err){setGpsNotice(err.message);setIsSharing(false);await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()})}finally{setBusy(false)}
   }
-  async function stopSharing(){setBusy(true);if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null}if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null}const {error}=await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false);setGpsNotice(error?error.message:'Location sharing stopped. Your latest GPS coordinates were cleared.');setLocations([]);setBusy(false)}
+  // There is no child-facing in-app stop switch; OS permission remains user-controlled.
+  useEffect(()=>{
+    // Resume an already-granted GPS permission when the child opens the app.
+    // First-time access remains an explicit device permission action.
+    if(!session?.user||profile?.role!=='child'||!profile.profile_completed||!family||!navigator.geolocation||!navigator.permissions?.query)return
+    let cancelled=false
+    const resume=async()=>{
+      try{
+        const permission=await navigator.permissions.query({name:'geolocation'})
+        if(!cancelled&&permission.state==='granted'&&watchIdRef.current===null&&!autoStartRef.current){
+          autoStartRef.current=true
+          await startSharing()
+        }
+      }catch{}
+    }
+    resume()
+    const visible=()=>{if(document.visibilityState==='visible'&&watchIdRef.current===null){autoStartRef.current=false;resume()}}
+    document.addEventListener('visibilitychange',visible)
+    return()=>{cancelled=true;document.removeEventListener('visibilitychange',visible)}
+  },[session?.user?.id,profile?.role,profile?.profile_completed,family?.id])
   useEffect(()=>()=>{if(watchIdRef.current!==null && navigator.geolocation)navigator.geolocation.clearWatch(watchIdRef.current);if(heartbeatRef.current!==null)clearInterval(heartbeatRef.current)},[])
   if(booting) return <div className="splash"><img src="/logo-wordmark.webp" alt="weRfam"/><div className="loading-ring"/>Loading family circle...</div>
   if(demo) return <AppShell isDemo onSignOut={()=>setDemo(false)}/>
