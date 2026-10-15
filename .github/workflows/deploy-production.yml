@@ -66,5 +66,8 @@ jobs:
       - name: Build the committed source
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
+      - name: Test GPS map overlap layout
+        run: npm test
+
       - name: Publish to production
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

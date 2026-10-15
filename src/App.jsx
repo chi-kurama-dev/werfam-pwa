@@ -9,6 +9,7 @@ import {
   MessageCircle, Send, AlertTriangle, Trash2, Siren, Zap
 } from 'lucide-react'
 import { supabase, isConfigured } from './supabase.js'
+import { spreadOverlappingPins } from './mapOverlap.js'
 
 const DEMO_FAMILY = { id: 'demo', name: 'The Rivera Family', owner_id: 'demo-parent' }
 const DEMO_MEMBERS = [
@@ -52,51 +53,13 @@ const Status = ({ state, sample = false }) => <span className={`status-pill ${sa
 // Visual-only spiderfy: nearby GPS markers are fanned apart in screen pixels.
 // Reported latitude/longitude is never altered or written back to Supabase.
 // Each dashed connector points from a displayed marker to its true GPS fix.
-function groupMapOverlaps(points,map,threshold=76){
-  const projected=points.map(item=>map.latLngToLayerPoint([Number(item.loc.latitude),Number(item.loc.longitude)]))
-  const parent=projected.map((_,i)=>i)
-  const root=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i]}return i}
-  for(let i=0;i<projected.length;i++){
-    for(let j=i+1;j<projected.length;j++){
-      if(projected[i].distanceTo(projected[j])<threshold){
-        const a=root(i),b=root(j)
-        if(a!==b)parent[b]=a
-      }
-    }
-  }
-  const groups=new Map()
-  for(let i=0;i<points.length;i++){
-    const key=root(i)
-    if(!groups.has(key))groups.set(key,[])
-    groups.get(key).push(i)
-  }
-  const positions=new Map()
-  const size=map.getSize()
-  let overlapGroups=0
-  for(const indexes of groups.values()){
-    if(indexes.length===1)continue
-    overlapGroups++
-    const radius=indexes.length===2?43:Math.max(52,Math.ceil(indexes.length*76/(2*Math.PI)))
-    const baseX=indexes.reduce((sum,i)=>sum+projected[i].x,0)/indexes.length
-    const baseY=indexes.reduce((sum,i)=>sum+projected[i].y,0)/indexes.length
-    const clamp=(value,min,max)=>Math.max(Math.min(min,max),Math.min(value,Math.max(min,max)))
-    // Keep the expanded pins in view when a group is near a map edge.
-    const cx=clamp(baseX,radius+36,size.x-radius-36)
-    const cy=clamp(baseY,radius+38,size.y-radius-38)
-    indexes.forEach((idx,ordinal)=>{
-      const theta=indexes.length===2?Math.PI-ordinal*Math.PI:(-Math.PI/2+ordinal*2*Math.PI/indexes.length)
-      positions.set(idx,map.layerPointToLatLng(L.point(cx+radius*Math.cos(theta),cy+radius*Math.sin(theta))))
-    })
-  }
-  return {positions,overlapGroups}
-}
-
 function FamilyMap({ members, locations, preview = false, selectedId, onSelect, className = '' }) {
   const elementRef = useRef(null)
   const mapRef = useRef(null)
   const markersRef = useRef(null)
   const firstFitRef = useRef(true)
   const [expandedGroups,setExpandedGroups] = useState(0)
+  const [expandedMembers,setExpandedMembers] = useState(0)
   const points = members.map((m, idx) => ({ member: m, idx, loc: locations.find(l => l.user_id === m.user_id) }))
     .filter(o => o.loc && o.loc.latitude != null && o.loc.longitude != null &&
       Number.isFinite(Number(o.loc.latitude)) && Number.isFinite(Number(o.loc.longitude)) && o.loc.enabled)
@@ -120,8 +83,9 @@ function FamilyMap({ members, locations, preview = false, selectedId, onSelect, 
     if (!map || !layer) return
     const draw=()=>{
       layer.clearLayers()
-      const {positions,overlapGroups}=groupMapOverlaps(points,map)
+      const {positions,overlapGroups,overlapMembers}=spreadOverlappingPins(points,map)
       setExpandedGroups(previous=>previous===overlapGroups?previous:overlapGroups)
+      setExpandedMembers(previous=>previous===overlapMembers?previous:overlapMembers)
       for(let n=0;n<points.length;n++){
         const {member,idx,loc}=points[n]
         const trueLatLng=L.latLng(Number(loc.latitude),Number(loc.longitude))
@@ -150,7 +114,7 @@ function FamilyMap({ members, locations, preview = false, selectedId, onSelect, 
         marker.bindPopup(`<div class="map-popup"><b>${sanitize(name)}</b>
           <small>${preview?'Preview location — not live':sanitize(member.relation||'Member')} · ${sanitize(timeAgo(loc.updated_at))}</small>
           <small>Accuracy: approximately ${Math.round(loc.accuracy_m||0)} m</small>
-          ${fanned?'<small>Marker spread for visibility. Dashed line shows its actual GPS fix.</small>':''}</div>`)
+          ${fanned?'<small>Avatar separated for visibility. Dashed line points to reported GPS.</small>':''}</div>`,{autoPan:false})
         marker.on('click',()=>onSelect?.(member.user_id))
         if(selectedId===member.user_id)marker.openPopup()
       }
@@ -177,7 +141,7 @@ function FamilyMap({ members, locations, preview = false, selectedId, onSelect, 
     <div className="map-top-label"><span className="map-light"/><div><b>Family live map</b>
       <small>{preview?'Interface preview · sample coordinates':'Private to linked family accounts'}</small></div></div>
     {expandedGroups>0&&<div className="map-spiderfy-key" role="status">
-      <UsersRound size={13}/> Nearby pins spread apart · dashed lines point to GPS
+      <UsersRound size={13}/> {expandedMembers} overlapping members · pins separated
     </div>}
     {points.length?<button className="map-recenter" onClick={locateAll}><LocateFixed size={17}/> Fit family</button>:
       <div className="no-map-points"><MapPin size={25}/><b>No shared locations</b>

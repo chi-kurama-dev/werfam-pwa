@@ -382,3 +382,6 @@
   color:#0c6179;font:700 9px/1.45 Poppins,sans-serif}
 .map-spiderfy-key svg{flex:none;color:#f09142}
 @media(max-width:720px){.map-spiderfy-key{top:42px;right:6px;max-width:62%;font-size:8px;padding:5px 7px}}
+
+/* Keep separated avatars crisp and individually selectable. */
+.family-map-pin.spread{transform:translateZ(0)}
