@@ -5,7 +5,8 @@ import {
   Plus, ArrowRight, LogOut, Copy, Check, Menu, X, Heart, Navigation,
   ChevronRight, Clock3, UserRoundPlus, MapPinned, Eye, EyeOff, RefreshCw,
   Smartphone, LockKeyhole, CircleHelp, Wifi, WifiOff, Shield, KeyRound,
-  AlertCircle, Sparkles, ExternalLink, RadioTower, UserRound, Mail
+  AlertCircle, Sparkles, ExternalLink, RadioTower, UserRound, Mail,
+  MessageCircle, Send, AlertTriangle, Trash2, Siren, Zap
 } from 'lucide-react'
 import { supabase, isConfigured } from './supabase.js'
 
@@ -237,9 +238,141 @@ function ChildProfileSetup({initialName,onComplete,onSignOut}) {
   </div>
 }
 
-function AppShell({ isDemo = false, session, profile, family, members, locations, invites, parentName, onAddChild, onSignOut, onReload, isSharing, onStartSharing, gpsNotice, busy }) {
+
+const EMERGENCY_TEMPLATES = [
+  "SOS! I need help right now.",
+  "I am hurt. Please call me immediately.",
+  "I feel unsafe. Please contact me now.",
+  "I am lost. Please help me find my way.",
+  "Please pick me up as soon as possible.",
+  "I need medical assistance.",
+  "I need you to call me urgently.",
+  "Someone is following me. I need help.",
+  "Please check on me. I am worried.",
+  "Emergency: please come to my location if you can safely help."
+]
+const CHILD_QUICK_TEMPLATES = [
+  "I'm safe and doing okay.",
+  "I arrived at school.",
+  "I'm leaving school now.",
+  "I'm on my way home.",
+  "I arrived home safely.",
+  "Please pick me up.",
+  "Please call me when you can.",
+  "I'm running a little late.",
+  "I'm with my teacher.",
+  "I love you! ❤️"
+]
+
+function FamilyChat({family, people, userId, isParent, isDemo}) {
+  const [messages,setMessages]=useState([])
+  const [draft,setDraft]=useState('')
+  const [presetTab,setPresetTab]=useState(isParent?'emergency':'quick')
+  const [loading,setLoading]=useState(true)
+  const [sending,setSending]=useState(false)
+  const [error,setError]=useState('')
+  const endRef=useRef(null)
+
+  const fetchMessages=useCallback(async()=>{
+    if(isDemo)return
+    const {data,error:readError}=await supabase.from('family_chat_messages')
+      .select('id,family_id,sender_id,kind,body,created_at').eq('family_id',family.id)
+      .order('created_at',{ascending:false}).limit(100)
+    if(readError)throw readError
+    setMessages((data||[]).reverse())
+  },[family?.id,isDemo])
+
+  useEffect(()=>{
+    if(isDemo){setLoading(false);return}
+    let mounted=true
+    setLoading(true)
+    fetchMessages().catch(e=>{if(mounted)setError(e.message)}).finally(()=>{if(mounted)setLoading(false)})
+    const channel=supabase.channel('weRfam-chat-'+family.id)
+      .on('postgres_changes',{event:'*',schema:'public',table:'family_chat_messages',filter:'family_id=eq.'+family.id},
+        ()=>fetchMessages().catch(e=>{if(mounted)setError(e.message)})).subscribe()
+    const poll=setInterval(()=>{if(document.visibilityState==='visible')fetchMessages().catch(()=>{})},12000)
+    return()=>{mounted=false;clearInterval(poll);supabase.removeChannel(channel)}
+  },[family?.id,isDemo,fetchMessages])
+  useEffect(()=>{endRef.current?.scrollIntoView({block:'end',behavior:'smooth'})},[messages.length])
+
+  async function send(body,kind='message'){
+    const clean=String(body||'').trim()
+    if(!clean||clean.length>500||sending)return
+    setError('');setSending(true)
+    try{
+      if(isDemo){
+        setMessages(prev=>[...prev,{id:crypto.randomUUID(),sender_id:'demo-parent',body:clean,kind,created_at:new Date().toISOString()}])
+      }else{
+        const {error:sendError}=await supabase.rpc('send_family_chat_message',{
+          p_family_id:family.id,p_body:clean,p_kind:kind,
+          p_device_token:isParent?null:deviceToken()
+        })
+        if(sendError)throw sendError
+        await fetchMessages()
+      }
+      setDraft('')
+    }catch(e){setError(e.message || 'Could not send message.')}finally{setSending(false)}
+  }
+  const sample= presetTab==='emergency' ? EMERGENCY_TEMPLATES : CHILD_QUICK_TEMPLATES
+  const getName=id=>people.find(m=>m.user_id===id)?.profiles?.full_name || 'Family member'
+  return <section className="family-chat-view">
+    <div className="chat-page-top"><div><span className="eyebrow">PRIVATE FAMILY CIRCLE</span>
+      <h1><MessageCircle size={23}/> Family <span>group chat</span></h1>
+      <p>{people.length} linked people · Messages visible only within this family</p>
+    </div><span className="chat-online-chip"><ShieldCheck size={14}/> Family only</span></div>
+    <section className="chat-room">
+      <header className="chat-room-head"><div className="chat-room-icon"><MessageCircle size={19}/></div>
+        <div><b>{family.name}</b><span>{isDemo?'Preview messages':'Private group conversation'}</span></div>
+        <span className="chat-room-count">{people.length} <UsersRound size={13}/></span>
+      </header>
+      <div className="chat-messages" aria-live="polite">
+        {loading&&<div className="chat-empty">Loading family messages...</div>}
+        {!loading&&!messages.length&&<div className="chat-empty"><MessageCircle size={30}/>
+          <b>Your family chat is ready</b><span>Send a message or tap a ready-made message below.</span></div>}
+        {messages.map(m=>{
+          const mine=m.sender_id===userId
+          return <div className={'chat-line '+(mine?'mine':'theirs')} key={m.id}>
+            {!mine&&<Avatar name={getName(m.sender_id)} type={people.find(p=>p.user_id===m.sender_id)?.relation}/>}
+            <div className={'chat-bubble '+(m.kind==='emergency'?'emergency':'')}>
+              <div className="chat-bubble-header"><b>{mine?'You':getName(m.sender_id)}</b>
+                {m.kind==='emergency'&&<span className="chat-urgent"><Siren size={12}/> Emergency</span>}</div>
+              <span className="chat-body">{m.body}</span>
+              <time>{new Date(m.created_at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit'})}</time>
+            </div>
+          </div>
+        })}
+        <div ref={endRef}/>
+      </div>
+      <div className="chat-tools">
+        <div className="chat-tool-tabs">
+          {!isParent&&<button className={presetTab==='quick'?'active':''} onClick={()=>setPresetTab('quick')}><Zap size={14}/> Child quick (10)</button>}
+          <button className={presetTab==='emergency'?'active emergency-tab':''} onClick={()=>setPresetTab('emergency')}><AlertTriangle size={14}/> Emergency (10)</button>
+        </div>
+        <div className="chat-template-scroller">
+          {sample.map((body,i)=><button type="button" key={body} disabled={sending}
+            className={'chat-template '+(presetTab==='emergency'?'urgent':'')}
+            title={'One tap sends: '+body} onClick={()=>send(body,presetTab==='emergency'?'emergency':'quick')}>
+            <span>{i+1}</span>{body}
+          </button>)}
+        </div>
+        {presetTab==='emergency'&&<p className="chat-emergency-note"><AlertTriangle size={13}/> Sent only to your family chat; not to emergency services. In immediate danger, call local emergency services.</p>}
+      </div>
+      {error&&<div className="chat-error"><AlertCircle size={15}/>{error}</div>}
+      <form className="chat-compose" onSubmit={e=>{e.preventDefault();send(draft)}}>
+        <input value={draft} maxLength={500} onChange={e=>setDraft(e.target.value)}
+          placeholder="Message your family..." aria-label="Write a family message"/>
+        <button type="submit" aria-label="Send message" disabled={sending||!draft.trim()}><Send size={18}/></button>
+      </form>
+    </section>
+  </section>
+}
+
+function AppShell({ isDemo = false, session, profile, family, members, locations, invites, parentName, onAddChild, onRemoveChild, onSignOut, onReload, isSharing, onStartSharing, gpsNotice, busy }) {
   const [view, setView] = useState('map')
   const [showInvite, setShowInvite] = useState(false)
+  const [removeTarget,setRemoveTarget] = useState(null)
+  const [removing,setRemoving] = useState(false)
+  const [removeError,setRemoveError] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [copied, setCopied] = useState(null)
   const [message, setMessage] = useState('')
@@ -266,15 +399,25 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
     catch (err) { setMessage(err.message) }
     finally { setSavingInvite(false) }
   }
+  async function removeConfirmed(){
+    if(!removeTarget || isDemo)return
+    setRemoving(true);setRemoveError('')
+    try {
+      await onRemoveChild(removeTarget.user_id)
+      setMessage(removeTarget.profiles?.full_name+' removed from the family circle.')
+      setRemoveTarget(null)
+    } catch(e){setRemoveError(e.message||'Could not remove this child.')}
+    finally {setRemoving(false)}
+  }
   async function copyCode(code) { try { await navigator.clipboard.writeText(code); setCopied(code); setTimeout(() => setCopied(null), 2000) } catch { setMessage('Clipboard unavailable. Select and copy the code manually.') } }
-  const nav = [ { id:'map', label: 'Live Map', Icon: MapPinned }, { id:'family', label: 'My Family', Icon: UsersRound }, { id:'settings', label: 'Settings', Icon: Settings2 } ]
+  const nav = [ { id:'map', label: 'Live Map', Icon: MapPinned }, { id:'family', label: 'My Family', Icon: UsersRound }, { id:'chat', label:'Chat', Icon: MessageCircle }, { id:'settings', label: 'Settings', Icon: Settings2 } ]
   return <div className="shell">
     <aside className="sidebar"><img className="sidebar-logo" src="/logo-wordmark.webp" alt="weRfam"/>
       <div className="sidebar-divider"/><div className="sidebar-group-label">WORKSPACE</div>
       <nav className="side-nav">{nav.map(({id,label,Icon}) => <button key={id} onClick={() => setView(id)} className={view === id ? 'selected' : ''}><Icon size={20}/>{label}{view === id && <span className="nav-rail" />}</button>)}</nav>
       <div className="sidebar-bottom"><div className="side-security"><span className="security-icon"><ShieldCheck size={21}/></span><b>Private & protected</b><span>Your family circle, your control.</span></div><div className="sidebar-account"><Avatar name={mainName} type={isParent ? 'parent' : 'child'} /><div><b>{mainName}</b><small>{isParent ? 'Parent account' : 'Child account'}</small></div>{!isDemo && <IconButton title="Sign out" onClick={onSignOut}><LogOut size={17}/></IconButton>}</div></div>
     </aside>
-    <div className="main-area"><header className="topbar"><div className="mobile-brand"><img src="/logo-wordmark.webp" alt="weRfam"/></div><div className="topbar-context"><span className="breadcrumb">MY WORKSPACE <ChevronRight size={13} /> {view === 'map' ? 'FAMILY MAP' : view === 'family' ? 'MY FAMILY' : 'SETTINGS'}</span><h2>{view === 'map' ? 'Family overview' : view === 'family' ? 'My family circle' : 'Settings & privacy'}</h2></div><div className="topbar-right"><span className="private-chip"><ShieldCheck size={15}/> Private circle</span><Avatar name={mainName} type={isParent ? 'parent' : 'child'} size="small"/></div></header>
+    <div className="main-area"><header className="topbar"><div className="mobile-brand"><img src="/logo-wordmark.webp" alt="weRfam"/></div><div className="topbar-context"><span className="breadcrumb">MY WORKSPACE <ChevronRight size={13} /> {view === 'map' ? 'FAMILY MAP' : view === 'family' ? 'MY FAMILY' : view === 'chat' ? 'FAMILY CHAT' : 'SETTINGS'}</span><h2>{view === 'map' ? 'Family overview' : view === 'family' ? 'My family circle' : view === 'chat' ? 'Family group chat' : 'Settings & privacy'}</h2></div><div className="topbar-right"><span className="private-chip"><ShieldCheck size={15}/> Private circle</span><Avatar name={mainName} type={isParent ? 'parent' : 'child'} size="small"/></div></header>
       <main className="content"><div className="content-inner">
         {isDemo && <div className="demo-banner"><Eye size={17}/><div><b>Interface preview</b> — people and locations on this screen are sample data, not real tracking.</div><button onClick={() => window.location.reload()}>Sign in <ArrowRight size={15}/></button></div>}
         {message && <div className="inline-banner"><AlertCircle size={17}/><span>{message}</span><IconButton title="Dismiss" onClick={() => setMessage('')}><X size={15}/></IconButton></div>}
@@ -289,13 +432,25 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
           <div className="bottom-info"><div className="info-bubble"><span className="soft-icon cyan"><RadioTower size={19}/></span><div><b>Updates while sharing</b><span>Child devices send GPS updates while their PWA is open and active.</span></div></div><div className="info-bubble"><span className="soft-icon peach"><LockKeyhole size={19}/></span><div><b>Privacy first</b><span>Precise locations are available only to the linked family and the sharing account.</span></div></div></div>
         </section>}
         {view === 'family' && <><div className="heading-row"><div><span className="eyebrow">A CIRCLE THAT STAYS TOGETHER</span><h1>Meet your <span>family circle.</span></h1><p>Manage family invitations and see who has joined.</p></div>{isParent && <button className="primary-btn" onClick={()=>setShowInvite(true)}><UserRoundPlus size={18}/> Enroll child</button>}</div>
-          <div className="family-management"><div className="family-intro-card"><div className="family-decor"><UsersRound size={32}/></div><span className="section-kicker">PRIVATE FAMILY SPACE</span><h2>{familyName}</h2><p>Invite a son or daughter using a private one-time code. After they join and grant GPS permission, their location can appear on the family map.</p><div className="family-intro-count"><span><UsersRound size={17}/> {circleMembers.length} linked people</span><span><ShieldCheck size={17}/> Invitation only</span></div></div><div className="family-roster"><div className="roster-title"><h3>Linked people</h3><span>{circleMembers.length} total</span></div>{circleMembers.map((m,i)=><div className="roster-row" key={m.user_id}><Avatar name={m.profiles?.full_name} type={m.relation}/><div><b>{m.profiles?.full_name || 'Member'}</b><small>{m.relation} · {isDemo?'Sample':stateFor(effectiveLocations.find(l=>l.user_id===m.user_id))==='live'?'Location on':'Location private / inactive'}</small></div><span className={m.relation==='parent'?'role-badge owner':'role-badge'}>{m.relation}</span></div>)}{isParent&&!effectiveMembers.length && <p className="soft-copy">No children have joined. Create an invitation to begin.</p>}</div></div>
+          <div className="family-management"><div className="family-intro-card"><div className="family-decor"><UsersRound size={32}/></div><span className="section-kicker">PRIVATE FAMILY SPACE</span><h2>{familyName}</h2><p>Invite a son or daughter using a private one-time code. After they join and grant GPS permission, their location can appear on the family map.</p><div className="family-intro-count"><span><UsersRound size={17}/> {circleMembers.length} linked people</span><span><ShieldCheck size={17}/> Invitation only</span></div></div><div className="family-roster"><div className="roster-title"><h3>Linked people</h3><span>{circleMembers.length} total</span></div>{circleMembers.map((m,i)=><div className="roster-row" key={m.user_id}><Avatar name={m.profiles?.full_name} type={m.relation}/><div><b>{m.profiles?.full_name || 'Member'}</b><small>{m.relation} · {isDemo?'Sample':stateFor(effectiveLocations.find(l=>l.user_id===m.user_id))==='live'?'Location on':'Location private / inactive'}</small></div><span className={m.relation==='parent'?'role-badge owner':'role-badge'}>{m.relation}</span>{isParent&&m.relation!=='parent'&&!isDemo&&<button className="remove-child-btn" title={'Remove '+m.profiles?.full_name} onClick={()=>{setRemoveError('');setRemoveTarget(m)}}><Trash2 size={15}/> Remove</button>}</div>)}{isParent&&!effectiveMembers.length && <p className="soft-copy">No children have joined. Create an invitation to begin.</p>}</div></div>
           {isParent && <div className="invite-section"><div className="roster-title"><h3>Pending invitations</h3><span>Expires after 14 days</span></div>{isDemo ? <div className="invite-empty">Connect Supabase to create real, one-time family invite codes.</div> : invites.filter(i => !i.used_by && new Date(i.expires_at)>new Date()).length ? invites.filter(i => !i.used_by && new Date(i.expires_at)>new Date()).map(i=><div className="invite-row" key={i.id}><div className="invite-person"><Avatar name={i.child_name} type={i.relation==='son'?'son':'daughter'}/><div><b>{i.child_name}</b><small>{i.relation} · Pending acceptance</small></div></div><div className="invite-code"><code>{i.code}</code><button title="Copy invitation" onClick={()=>copyCode(i.code)}>{copied===i.code?<Check size={17}/>:<Copy size={17}/>}</button></div></div>) : <div className="invite-empty">No pending invitations.</div>}{!isDemo && <p className="invite-help"><LockKeyhole size={15}/> Share an invite code privately with the intended child. Codes work only once.</p>}</div>}
         </>}
-        {view === 'settings' && <><div className="heading-row"><div><span className="eyebrow">YOUR SPACE, YOUR CONTROL</span><h1>Privacy & <span>preferences.</span></h1><p>Manage your account and location-sharing choices.</p></div></div><div className="settings-layout"><section className="settings-panel"><h3><UserRound size={20}/> Account</h3><div className="profile-summary"><Avatar name={mainName} type={isParent ? 'parent' : 'child'} size="large"/><div><b>{mainName}</b><span>{isDemo ? 'Sample profile' : (isParent?session?.user?.email:'Code-only child · paired browser')}</span><small>{isParent?'Parent':'Child'} · {familyName}</small></div></div></section><section className="settings-panel"><h3><ShieldCheck size={20}/> Location & privacy</h3><div className="setting-line"><div><b>Family-only location access</b><small>Your precise GPS coordinates aren't public.</small></div><span className="settings-checked"><Check size={17}/> Enabled</span></div><div className="setting-line"><div><b>Location history</b><small>This version stores only the latest shared location, not a movement trail.</small></div><span className="settings-checked">Not saved</span></div><div className="setting-line"><div><b>Background tracking</b><small>A PWA can't promise continuous updates when closed or suspended.</small></div><span className="settings-checked">Limited</span></div>{!isParent && <div className="setting-line"><div><b>Family-managed GPS</b><small>{isSharing?'GPS is active while the app is open.':'GPS not available: allow location access on your phone.'} System location permission can always be changed on this device.</small></div><span className="settings-checked">{isSharing?'Active':'Permission needed'}</span></div>}</section><section className="settings-panel"><h3><CircleHelp size={20}/> About weRfam</h3><p className="about-copy">Version 0.3 · Parent-managed family invitations, consent-based child sharing and an OpenStreetMap family view.</p>{!isDemo && <button className="signout-button" onClick={onSignOut}><LogOut size={18}/> Sign out</button>}</section></div></>}
+        {view === 'chat' && <FamilyChat family={isDemo?DEMO_FAMILY:family} people={circleMembers} userId={isDemo?'demo-parent':session?.user?.id} isParent={isParent} isDemo={isDemo}/>}
+        {view === 'settings' && <><div className="heading-row"><div><span className="eyebrow">YOUR SPACE, YOUR CONTROL</span><h1>Privacy & <span>preferences.</span></h1><p>Manage your account and location-sharing choices.</p></div></div><div className="settings-layout"><section className="settings-panel"><h3><UserRound size={20}/> Account</h3><div className="profile-summary"><Avatar name={mainName} type={isParent ? 'parent' : 'child'} size="large"/><div><b>{mainName}</b><span>{isDemo ? 'Sample profile' : (isParent?session?.user?.email:'Code-only child · paired browser')}</span><small>{isParent?'Parent':'Child'} · {familyName}</small></div></div></section><section className="settings-panel"><h3><ShieldCheck size={20}/> Location & privacy</h3><div className="setting-line"><div><b>Family-only location access</b><small>Your precise GPS coordinates aren't public.</small></div><span className="settings-checked"><Check size={17}/> Enabled</span></div><div className="setting-line"><div><b>Location history</b><small>This version stores only the latest shared location, not a movement trail.</small></div><span className="settings-checked">Not saved</span></div><div className="setting-line"><div><b>Background tracking</b><small>A PWA can't promise continuous updates when closed or suspended.</small></div><span className="settings-checked">Limited</span></div>{!isParent && <div className="setting-line"><div><b>Family-managed GPS</b><small>{isSharing?'GPS is active while the app is open.':'GPS not available: allow location access on your phone.'} System location permission can always be changed on this device.</small></div><span className="settings-checked">{isSharing?'Active':'Permission needed'}</span></div>}</section><section className="settings-panel"><h3><CircleHelp size={20}/> About weRfam</h3><p className="about-copy">Version 0.4 · Parent-managed family invitations, consent-based child sharing and an OpenStreetMap family view.</p>{!isDemo && <button className="signout-button" onClick={onSignOut}><LogOut size={18}/> Sign out</button>}</section></div></>}
       </div></main>
       <nav className="mobile-tabs">{nav.map(({id,label,Icon})=><button key={id} onClick={()=>setView(id)} className={view===id?'selected':''}><Icon size={21}/><span>{label}</span></button>)}</nav>
     </div>
+    {removeTarget&&<div className="modal-scrim" onClick={()=>!removing&&setRemoveTarget(null)}>
+      <div className="modal remove-child-modal" role="dialog" aria-modal="true" aria-label="Remove child from family" onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><span className="modal-icon"><AlertTriangle size={22}/></span>
+          <IconButton title="Cancel" onClick={()=>!removing&&setRemoveTarget(null)}><X size={19}/></IconButton></div>
+        <h2>Remove this child?</h2>
+        <p><b>{removeTarget.profiles?.full_name}</b> will lose access to this family, the shared map, and group chat. Their pairing code, last GPS record and messages sent to this family will be removed. This action cannot be undone.</p>
+        {removeError&&<div className="error-box"><AlertCircle size={16}/>{removeError}</div>}
+        <div className="remove-actions"><button className="outline-action" disabled={removing} onClick={()=>setRemoveTarget(null)}>Cancel</button>
+        <button className="remove-confirm-btn" disabled={removing} onClick={removeConfirmed}><Trash2 size={16}/>{removing?'Removing...':'Remove child'}</button></div>
+      </div>
+    </div>}
     {showInvite && <div className="modal-scrim" onClick={()=>setShowInvite(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Enroll child" onClick={e=>e.stopPropagation()}><div className="modal-head"><span className="modal-icon"><UserRoundPlus size={22}/></span><IconButton title="Close" onClick={()=>setShowInvite(false)}><X size={19}/></IconButton></div><h2>Enroll your child</h2><p>Create a private invitation. Your child signs in using only this code on their own phone, then completes their profile.</p><form onSubmit={addChild}><label>Child's name</label><input maxLength={80} required placeholder="e.g. Maya Rivera" value={childName} onChange={e=>setChildName(e.target.value)}/><label>Family relationship</label><div className="role-choice"><button type="button" className={relation==='daughter'?'chosen':''} onClick={()=>setRelation('daughter')}><Heart size={17}/> Daughter</button><button type="button" className={relation==='son'?'chosen':''} onClick={()=>setRelation('son')}><Heart size={17}/> Son</button></div><div className="modal-info"><ShieldCheck size={18}/> Your child must explicitly allow location access on their own device. The parent cannot turn it on remotely.</div><button className="primary-btn full" disabled={savingInvite}>{savingInvite?'Creating invitation...':'Generate invite code'} <ArrowRight size={17}/></button></form></div></div>}
   </div>
 }
@@ -383,6 +538,11 @@ export default function App() {
     return()=>{clearInterval(poll);supabase.removeChannel(channel)}
   },[family?.id,session?.user?.id,reload])
   async function signOut(){ if(watchIdRef.current!==null){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null} if(heartbeatRef.current!==null){clearInterval(heartbeatRef.current);heartbeatRef.current=null} if(isSharing && profile?.role==='child')await supabase.rpc('set_tracking_enabled',{p_enabled:false,p_device_token:deviceToken()});setIsSharing(false);await supabase.auth.signOut() }
+  async function removeChild(childId){
+    const {error}=await supabase.rpc('remove_child_from_family',{p_child_id:childId})
+    if(error)throw error
+    await reload()
+  }
   async function addChild(name,relationship){const {error}=await supabase.rpc('create_child_invite',{p_name:name,p_relation:relationship});if(error)throw error;await reload()}
   async function finishProfile(name){
     const {error:e}=await supabase.rpc('complete_child_profile',{p_full_name:name,p_device_token:deviceToken()})
@@ -446,5 +606,5 @@ export default function App() {
   if(profile.role==='parent'&&!family) return <SetupFamily profile={profile} onComplete={reload} onSignOut={signOut}/>
   if(profile.role==='child'&&!profile.profile_completed) return <ChildProfileSetup initialName={profile.full_name} onComplete={finishProfile} onSignOut={signOut}/>
   if(profile.role==='child'&&!family) return <div className="setup-view"><div className="setup-card"><h2>Reconnect your family</h2><p>We couldn't load your family circle. Your account is paired; check your connection and retry.</p>{error&&<div className="error-box">{error}</div>}<button className="primary-btn full" onClick={reload}><RefreshCw size={17}/> Retry connection</button><button className="text-link" onClick={signOut}>Sign in with child code again</button></div></div>
-  return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} parentName={parentName} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} gpsNotice={gpsNotice} busy={busy}/>
+  return <AppShell session={session} profile={profile} family={family} members={members} locations={locations} invites={invites} onAddChild={addChild} onRemoveChild={removeChild} parentName={parentName} onSignOut={signOut} onReload={reload} isSharing={isSharing} onStartSharing={startSharing} gpsNotice={gpsNotice} busy={busy}/>
 }
