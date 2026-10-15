@@ -1,0 +1,4 @@
+# Child code is the credential before any Supabase Auth session exists.
+# Edge function validates high-entropy code and binds the child browser.
+[functions.child-code-login]
+verify_jwt = false
