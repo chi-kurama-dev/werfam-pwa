@@ -451,7 +451,10 @@ function AppShell({ isDemo = false, session, profile, family, members, locations
   async function copyCode(code) { try { await navigator.clipboard.writeText(code); setCopied(code); setTimeout(() => setCopied(null), 2000) } catch { setMessage('Clipboard unavailable. Select and copy the code manually.') } }
   const nav = [ { id:'map', label: 'Live Map', Icon: MapPinned }, { id:'family', label: 'My Family', Icon: UsersRound }, { id:'chat', label:'Chat', Icon: MessageCircle }, { id:'settings', label: 'Settings', Icon: Settings2 } ]
   return <div className="shell">
-    <aside className="sidebar"><img className="sidebar-logo" src="/logo-wordmark.webp" alt="weRfam"/>
+    <aside className="sidebar"><div className="sidebar-brand">
+        <img className="sidebar-logo" src="/logo-wordmark.webp" alt="weRfam"/>
+        <img className="sidebar-emblem" src="/logo-emblem.webp" alt="" aria-hidden="true"/>
+      </div>
       <div className="sidebar-divider"/><div className="sidebar-group-label">WORKSPACE</div>
       <nav className="side-nav">{nav.map(({id,label,Icon}) => <button key={id} onClick={() => setView(id)} className={view === id ? 'selected' : ''}><Icon size={20}/>{label}{view === id && <span className="nav-rail" />}</button>)}</nav>
       <div className="sidebar-bottom"><div className="side-security"><span className="security-icon"><ShieldCheck size={21}/></span><b>Private & protected</b><span>Your family circle, your control.</span></div><div className="sidebar-account"><Avatar name={mainName} type={isParent ? 'parent' : 'child'} /><div><b>{mainName}</b><small>{isParent ? 'Parent account' : 'Child account'}</small></div>{!isDemo && <IconButton title="Sign out" onClick={onSignOut}><LogOut size={17}/></IconButton>}</div></div>
